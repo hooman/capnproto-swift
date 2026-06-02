@@ -1,0 +1,46 @@
+name: embedded-clean
+
+# Proves INVARIANT 2: CapnpRuntime compiles under Embedded Swift's `-no-allocations`
+# (any reachable heap allocation is a compile error). Gate logic: ci/check-embedded-clean.sh.
+#
+# The macOS runner's bundled Xcode toolchain does NOT ship the embedded stdlib (R1 I13),
+# so each matrix leg installs a Swift.org toolchain and runs the gate against it.
+# Matrix covers the dev toolchain (6.3.1) and the D-1 floor (6.2.4) — both R1-verified.
+
+on:
+  push:
+    paths:
+      - 'Sources/CapnpRuntime/**'
+      - 'ci/**'
+      - '.github/workflows/embedded-clean.yml'
+  pull_request:
+    paths:
+      - 'Sources/CapnpRuntime/**'
+      - 'ci/**'
+      - '.github/workflows/embedded-clean.yml'
+  workflow_dispatch:
+
+jobs:
+  embedded-clean:
+    name: "embedded-clean (Swift ${{ matrix.swift }})"
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.3.1", "6.2.4"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Swift.org ${{ matrix.swift }} toolchain (embedded stdlib; runner Xcode lacks it)"
+        run: |
+          set -euo pipefail
+          V="${{ matrix.swift }}"
+          curl -fsSL -o /tmp/swift.pkg \
+            "https://download.swift.org/swift-${V}-release/xcode/swift-${V}-RELEASE/swift-${V}-RELEASE-osx.pkg"
+          installer -pkg /tmp/swift.pkg -target CurrentUserHomeDirectory
+
+      - name: "Embedded-clean gate (-no-allocations compile + nm audit + negative control)"
+        run: |
+          export SWIFTC="$HOME/Library/Developer/Toolchains/swift-${{ matrix.swift }}-RELEASE.xctoolchain/usr/bin/swiftc"
+          chmod +x ci/check-embedded-clean.sh
+          ci/check-embedded-clean.sh
