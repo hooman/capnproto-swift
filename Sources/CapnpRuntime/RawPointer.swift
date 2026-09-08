@@ -1,16 +1,8 @@
-// RawPointer — POD decode of a 64-bit Cap'n Proto pointer word.
-//
-// Plain `Copyable, Escapable` value: it decodes the word into a kind tag + per-kind
-// integer fields and does NOTHING else. No resolution, no bounds checks, no segment
-// lookup, no `~Escapable` — pointer *following* is the resolver (milestone 2); far
-// pointers / multi-segment is milestone 2b. Being POD-only is also what sidesteps the
-// parked noncopyable-enum problem (SE-0532): no associated-value enum is needed.
-//
-// No `RawSpan` appears here, so no `@available` gate (pure `UInt64` math). Bit layout
-// cross-checked against capnproto-rust `private/layout.rs` `WirePointer` and
-// encoding.md §Structs/§Lists/§Inter-Segment/§Capabilities. Mirrors rust `WirePointer`.
+// Decode pointer bits independently of storage ownership and target validation.
+// Keeping the two raw halves lets the resolver interpret each kind without creating
+// borrowed enum payloads; no decoded address is safe to access until bounds checked.
 
-/// A decoded 64-bit pointer word. Construct from the little-endian word; read the
+/// A decoded 64-bit pointer word. Construct from a host-endian word; read the
 /// per-kind fields that match `kind`. The two raw halves are kept verbatim
 /// (`lowWord` = `offset_and_kind`, `highWord` = `upper32`) and fields are computed.
 public struct RawPointer {
@@ -21,15 +13,17 @@ public struct RawPointer {
     /// far segment id / capability index.
     public let highWord: UInt32
 
-    /// Decode a pointer from its little-endian 64-bit word.
+    /// Decode a word already converted from wire little-endian to host byte order.
     public init(_ word: UInt64) {
+        // Concrete word extraction avoids allocating generic integer conversions on
+        // 32-bit Embedded targets; see Widen.swift and ci/check-cross.py.
         self.lowWord = UInt32(truncatingIfNeeded: word._lowWord)
         self.highWord = UInt32(truncatingIfNeeded: (word &>> 32)._lowWord)
     }
 
     /// Pointer kind (encoding.md `A`): the low 2 bits of the word.
     public enum Kind: UInt8 {
-        case structure = 0   // rust WirePointerKind::Struct
+        case structure = 0
         case list = 1
         case far = 2
         case other = 3       // capability / "other"
@@ -84,7 +78,7 @@ public struct RawPointer {
 
     // MARK: Other / capability (kind == .other)
 
-    /// Capability-table index, for capability pointers. RPC is out of v1 scope (D-3 /
-    /// D-15): the resolver treats this as null/broken — `RawPointer` only decodes it.
+    /// Capability-table index. The v1 resolver deliberately returns empty views for
+    /// capabilities because readers-only v1 has no RPC capability table.
     public var capabilityIndex: UInt32 { highWord }
 }

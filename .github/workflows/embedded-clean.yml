@@ -1,11 +1,8 @@
 name: embedded-clean
 
-# Proves INVARIANT 2: CapnpRuntime compiles under Embedded Swift's `-no-allocations`
-# (any reachable heap allocation is a compile error). Gate logic: ci/check-embedded-clean.sh.
-#
-# The macOS runner's bundled Xcode toolchain does NOT ship the embedded stdlib (R1 I13),
-# so each matrix leg installs a Swift.org toolchain and runs the gate against it.
-# Matrix covers the dev toolchain (6.3.1) and the D-1 floor (6.2.4) — both R1-verified.
+# Install explicit Swift.org versions so host and Embedded checks use matching modules
+# independent of runner defaults. Both the development compiler and supported floor
+# run semantic, lifetime and allocation checks; scripts in ci/ own the gate logic.
 
 on:
   push:

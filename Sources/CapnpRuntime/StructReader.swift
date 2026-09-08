@@ -1,3 +1,7 @@
+// Struct fields use separate data and pointer regions so older messages can omit
+// trailing fields without making them invalid. Resolvers validate the region extents;
+// getters check only the requested field against that layout and apply its default.
+
 /// A borrowed struct data/pointer view. Missing fields read their schema defaults.
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct StructReader: ~Escapable {
@@ -22,7 +26,10 @@ public struct StructReader: ~Escapable {
         self.nestingLimit = nestingLimit
     }
 
-    // Retains the M1 test fixture initializer; pointer following is unavailable through it.
+    // Trusted fixture seam: supplied regions must already be in bounds. The empty state
+    // disables pointer traversal and error reporting; this is not an input validation path.
+    // TODO(test-fixtures): move trusted fixture construction into the test target and
+    // remove this initializer from production sources.
     @_lifetime(borrow arena)
     init(arena: borrowing Arena, dataStartByte: Int, dataSizeBits: Int,
          ptrStartByte: Int, ptrCount: Int, nestingLimit: Int = Wire.nestingLimit) {
@@ -33,8 +40,11 @@ public struct StructReader: ~Escapable {
                   segmentID: arena.segmentID, nestingLimit: nestingLimit)
     }
 
+    /// Read an offset measured in units of T (bits for Bool), applying the schema XOR mask.
+    /// A field not wholly present in the data section returns its default.
     public func data<T: CapnpPrimitive>(at offset: Int, default value: T) -> T {
         let width = T.sizeInBits
+        // Divide before multiplying the field offset to avoid overflow on invalid offsets.
         guard width > 0, offset >= 0, dataSizeBits >= width,
               offset <= (dataSizeBits - width) / width else { return value }
         return T.loadUnmasked(from: context.bytes,
@@ -53,7 +63,8 @@ public struct StructReader: ~Escapable {
                       nestingLimit: nestingLimit)
     }
 
-    /// A second view of the same struct, used for generated group/union readers.
+    /// Select an active union member, or an empty view whose fields read their defaults.
+    /// The discriminant offset is measured in UInt16 elements.
     @_lifetime(copy self)
     public func unionMember(at discriminantOffset: Int, equals value: UInt16) -> StructReader {
         if data(at: discriminantOffset, default: UInt16(0)) == value { return borrowed() }

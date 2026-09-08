@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Compile runtime and generated readers for one Embedded target; no linking required."""
+"""Check concrete runtime and generated-reader paths across an Embedded module boundary.
+Compile with -no-allocations, audit allocator symbols, and reject an allocating control.
+This checks target compilation only; it does not link firmware or execute on hardware.
+"""
 import argparse
 from pathlib import Path
 import re

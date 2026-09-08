@@ -1,25 +1,14 @@
 #!/usr/bin/env bash
-# check-embedded-clean.sh — the Embedded-clean gate for CapnpRuntime (INVARIANT 2).
+# Compile an exported runtime call graph under Embedded + -no-allocations, audit its
+# object, and require an allocating negative control to fail. All three checks matter:
+# synthesized coroutine allocations can escape the compiler diagnostic, while a
+# negative control catches a disabled or ineffective no-allocation check.
+# Match specific allocator symbols: generic "alloc" searches also match harmless
+# Embedded support symbols such as _swift_allocEmptyBox and _swift_setDeallocating.
 #
-# Compiles CapnpRuntime under Embedded + -no-allocations on the host Apple triple.
-# The COMPILE PASS is the authoritative gate: any reachable heap allocation is a
-# compile error (compiler-enforced, stronger than reading symbols). Two backups:
-#   * nm audit (secondary): assert SPECIFIC allocator symbols are absent. Never a
-#     generic "alloc" grep — a clean object still defines _swift_allocEmptyBox /
-#     _swift_setDeallocating (embedded-runtime support), so "nm | grep alloc" would
-#     false-positive on a clean build (R1 finding I5).
-#   * negative control: ci/negative-control.swift (a heap allocation) MUST be
-#     rejected, so the gate can never silently pass vacuously (e.g. a flag silently
-#     ignored). It lives under ci/, never Sources/, so it is never linked.
-#
-# Requires a Swift.org toolchain that ships the embedded stdlib — the Xcode/Command
-# Line Tools Swift does NOT (no usr/lib/swift/embedded), so point SWIFTC at a
-# download.swift.org toolchain (R1 findings I6/I13).
-#
-# Usage:   ci/check-embedded-clean.sh
-# Env:
-#   SWIFTC   swiftc to use (default: 6.3.1 Swift.org toolchain)
-#   TARGET   target triple (default: arm64-apple-macos15)
+# Requires a toolchain with lib/swift/embedded. Set SWIFTC and TARGET to select it;
+# all intermediate files are temporary. The cross-target/generated-reader companion
+# is ci/check-cross.py.
 set -euo pipefail
 
 SWIFTC="${SWIFTC:-$HOME/Library/Developer/Toolchains/swift-6.3.1-RELEASE.xctoolchain/usr/bin/swiftc}"

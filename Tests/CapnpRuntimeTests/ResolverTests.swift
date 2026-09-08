@@ -1,3 +1,7 @@
+// Handwritten wire words cover valid and malformed layouts, including landing pads and
+// truncated bodies that a conforming encoder would not normally produce. Keep these
+// directed cases alongside the independent C++ encoder checks in ci/check-readers.py.
+
 import Testing
 @testable import CapnpRuntime
 

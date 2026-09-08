@@ -1,3 +1,7 @@
+// Owned intermediate representation separates borrowed request decoding from rendering
+// and file I/O. References remain node IDs rather than expanded trees, so recursive
+// schemas terminate and imported declarations can be qualified without re-emission.
+
 import Foundation
 
 struct CompilerFailure: Error, CustomStringConvertible {
@@ -5,6 +9,7 @@ struct CompilerFailure: Error, CustomStringConvertible {
     init(_ message: String) { description = message }
 }
 
+// Raw values match schema.capnp Type discriminants; the lookup tables share that order.
 enum Scalar: UInt16 {
     case void, bool, int8, int16, int32, int64, uint8, uint16, uint32, uint64, float32, float64
 

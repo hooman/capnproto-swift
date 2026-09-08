@@ -1,3 +1,7 @@
+// Host-only measurement driver. File I/O precedes timing; the loop includes arena
+// construction, validation and fixture assertions, not just scalar loads. The printed
+// checksum keeps results observable and lets repeated runs be compared for correctness.
+
 import Foundation
 let mode = Int32(CommandLine.arguments[2])!
 let bytes = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))

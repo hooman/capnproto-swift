@@ -1,3 +1,7 @@
+// Blob readers retain a validated byte range instead of allocating Data or String.
+// Text is validated once when opened; subsequent indexing returns UTF-8 code units,
+// not characters, and excludes the wire terminator.
+
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct DataReader: ~Escapable {
     let context: ReadContext
@@ -16,6 +20,10 @@ public struct DataReader: ~Escapable {
         return context.bytes.unsafeLoadUnaligned(fromByteOffset: start + index, as: UInt8.self)
     }
 
+    // One pass, constant storage: the lead byte determines length and the allowed
+    // second-byte interval. Those intervals exclude overlong encodings, surrogates
+    // and scalars above U+10FFFF; remaining bytes need only be continuation bytes.
+    // Check the complete sequence extent before accessing any continuation byte.
     func validUTF8() -> Bool {
         var i = 0
         while i < count {

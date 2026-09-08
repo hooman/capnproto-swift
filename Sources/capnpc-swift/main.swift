@@ -1,3 +1,7 @@
+// capnp supplies one binary request on stdin and chooses the output working directory.
+// Decode and render everything before writing; diagnostics go to stderr. This boundary
+// owns host allocations and filesystem policy so the reader runtime remains freestanding.
+
 import Foundation
 
 private func fail(_ error: Error) -> Never {
@@ -19,6 +23,7 @@ do {
     guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else {
         throw CompilerFailure("this host requires macOS 15 or later")
     }
+    // Bound input while streaming it in; readToEnd would allocate before enforcing the cap.
     let limit = 64 * 1024 * 1024
     var input = Data()
     while let chunk = try FileHandle.standardInput.read(upToCount: 64 * 1024), !chunk.isEmpty {
@@ -32,7 +37,9 @@ do {
     let manager = FileManager.default
     let root = URL(fileURLWithPath: manager.currentDirectoryPath, isDirectory: true)
         .resolvingSymlinksInPath().standardizedFileURL
-    // Complete semantic validation before creating or replacing any output.
+    // Preflight every destination after rendering. Resolve existing symlinks as well as
+    // lexical .. components; this assumes no concurrent mutation of the output directory.
+    // Writes below are atomic per file, not a transaction across all generated files.
     let destinations = try files.map { file -> URL in
         let destination = root.appendingPathComponent(file.path).standardizedFileURL
             .resolvingSymlinksInPath()

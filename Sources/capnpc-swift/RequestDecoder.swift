@@ -1,8 +1,10 @@
 import Foundation
 import CapnpRuntime
 
-// Bootstrap offsets are element offsets, transcribed from upstream schema.capnp.h.
-// Keep this layer on the runtime so real compiler requests exercise framing and far pointers.
+// Bootstrap the compiler through CapnpRuntime without requiring a generated schema
+// reader to build the generator itself. Offsets are transcribed from upstream
+// capnp/schema.capnp.h Reader accessors: data offsets use the scalar's element width,
+// pointer offsets count slots, and discriminants describe schema unions, not wire kinds.
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 enum RequestDecoder {
     static func decode(_ data: Data) throws -> SchemaRequest {
@@ -12,6 +14,8 @@ enum RequestDecoder {
             guard arena.error == .none, arena.consumedByteCount == data.count else {
                 throw CompilerFailure("expected exactly one complete unpacked CodeGeneratorRequest")
             }
+            // Capture throwing decode inside the borrowing scope. Check the sticky runtime
+            // error before accepting an IR: malformed reads may have yielded valid-looking defaults.
             let result = arena.withRoot { root in Result { try request(root) } }
             guard arena.error == .none else {
                 throw CompilerFailure("invalid CodeGeneratorRequest: \(arena.error)")
@@ -27,6 +31,8 @@ enum RequestDecoder {
         return String(decoding: bytes, as: UTF8.self)
     }
 
+    // TODO(codegen-docs): decode CodeGeneratorRequest.sourceInfo and carry declaration
+    // and member documentation through SchemaRequest into generated Swift doc comments.
     static func request(_ root: borrowing StructReader) throws -> SchemaRequest {
         var nodes: [UInt64: SchemaNode] = [:]
         let list = root.pointerField(at: 0).list(of: .inlineComposite)

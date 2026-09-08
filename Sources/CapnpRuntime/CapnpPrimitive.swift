@@ -1,41 +1,24 @@
-// CapnpPrimitive — typed unaligned little-endian load + XOR-default unmasking for
-// data-section scalar element types.
-//
-// Used ONLY as a generic constraint (`<T: CapnpPrimitive>`), never `any CapnpPrimitive`,
-// so it fully specializes under Embedded `-wmo` with no witness-table residue — verified
-// by Gate-0 probe G2 (cross-file specialization, 6.3.1 + 6.2.4). Mirrors the merge of
-// rust `PrimitiveElement` + `Mask` + `Zero`.
-//
-// `@available`-gated because `loadUnmasked` names `RawSpan`, whose Apple back-deployment
-// floor is the SwiftCompatibilitySpan set (D-10 / DR-D). No-op off-Darwin.
-//
-// Two spec special cases (encoding.md §Value Encoding):
-//   • floats XOR via BIT PATTERN — the mask type differs from `Self` (f32→UInt32,
-//     f64→UInt64), so the unmask happens on the integer bits, then `init(bitPattern:)`.
-//   • `Bool` is BIT-ADDRESSED — load the containing byte and extract the bit; never
-//     `unsafeLoadUnaligned(as: Bool.self)` (a stray bit pattern would be an invalid Bool).
+// Scalar decoding uses unaligned little-endian loads because borrowed message storage
+// need not satisfy Swift alignment. XOR with the schema default makes zero wire bits
+// decode as that default. Floats XOR integer bit patterns, preserving NaNs and signed
+// zero; Bool extracts one bit rather than loading a possibly invalid Bool representation.
+// Generic constraints let Embedded specialize this path without existential dispatch.
 
 /// A data-section scalar whose wire bits can be loaded little-endian and XOR-unmasked
 /// against its schema default.
 @available(macOS 10.14.4, iOS 12.2, watchOS 5.2, tvOS 12.2, visionOS 1.0, *)
 public protocol CapnpPrimitive {
-    /// Width of one element in BITS — the data-section stride for this type
-    /// (`UInt32` → 32, `Bool` → 1). Drives both field addressing and the
-    /// version-tolerant bounds check in `StructReader.data`.
+    /// Positive bit width used for field addressing and bounds checks (Bool uses one bit).
     static var sizeInBits: Int { get }
 
     /// Load the element at carrier-relative `bit`, XOR-unmasking with `default`.
-    /// The caller (`StructReader.data`) guarantees the element's bits lie within the
-    /// data section. `bit` is a multiple of 8 for every type except `Bool`.
+    /// Caller must validate the complete element range in `span` before calling.
+    /// `bit` is a multiple of 8 for every supported type except Bool.
     static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default: Self) -> Self
 }
 
-// MARK: - Integer family (one constrained-extension witness; the verified G2 form)
+// MARK: - Integers
 
-// All fixed-width integers share the same path: unaligned LE load + XOR. A single
-// constrained extension supplies the witnesses; each concrete conformance below is a
-// one-liner. (`BitwiseCopyable` is required by `unsafeLoadUnaligned`; `FixedWidthInteger`
-// gives `bitWidth`, `init(littleEndian:)`, and `^`.)
 @available(macOS 10.14.4, iOS 12.2, watchOS 5.2, tvOS 12.2, visionOS 1.0, *)
 extension CapnpPrimitive where Self: FixedWidthInteger & BitwiseCopyable {
     public static var sizeInBits: Int { Self.bitWidth }
@@ -61,7 +44,7 @@ extension Int32: CapnpPrimitive {}
 @available(macOS 10.14.4, iOS 12.2, watchOS 5.2, tvOS 12.2, visionOS 1.0, *)
 extension Int64: CapnpPrimitive {}
 
-// MARK: - Floating point (XOR via bit pattern; mask type differs from Self)
+// MARK: - Floating point
 
 @available(macOS 10.14.4, iOS 12.2, watchOS 5.2, tvOS 12.2, visionOS 1.0, *)
 extension Float: CapnpPrimitive {
@@ -81,7 +64,7 @@ extension Double: CapnpPrimitive {
     }
 }
 
-// MARK: - Bool (bit-addressed)
+// MARK: - Bool
 
 @available(macOS 10.14.4, iOS 12.2, watchOS 5.2, tvOS 12.2, visionOS 1.0, *)
 extension Bool: CapnpPrimitive {
@@ -89,14 +72,8 @@ extension Bool: CapnpPrimitive {
     public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Bool) -> Bool {
         let byte = span.unsafeLoadUnaligned(fromByteOffset: bit / 8, as: UInt8.self)
         let isSet = (byte >> UInt8(bit % 8)) & 1 == 1
-        return isSet != d   // XOR against the default bit
+        return isSet != d
     }
 }
 
-// NOTE on `Void` (encoding.md: void fields carry no storage). The milestone lists
-// `Void` among the primitive set, but `Void` is the empty tuple `()`, and Swift tuples
-// cannot be extended to conform to a protocol — `extension Void: CapnpPrimitive` is not
-// expressible. This is harmless: a void field has nothing to load, so generated code
-// returns `()` directly without a `data<T>` call. No conformance is (or can be) added.
-// Likewise enums are not given a blanket conformance — a generated enum reads its raw
-// `UInt16` via `data(at:default:)` and maps it; that is codegen (D-7), out of scope here.
+// Void has no wire storage; generated getters return () without a scalar load.

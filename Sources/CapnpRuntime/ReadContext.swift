@@ -1,3 +1,7 @@
+// Validate the frame once, then locate segments by summing its size table on demand.
+// This trades O(segment ID) lookup for zero auxiliary allocation; segmentLimit bounds
+// the scan. Offsets are absolute bytes in the borrowed buffer, sizes are wire words.
+
 import Synchronization
 
 struct Segment {
@@ -7,6 +11,8 @@ struct Segment {
     func contains(_ byte: Int, words count: UInt64) -> Bool {
         guard byte >= start, (byte - start) % 8 == 0 else { return false }
         let offset = (byte - start) / 8
+        // Subtract within the segment rather than adding an untrusted size to an address.
+        // An empty object may start exactly at the end of its segment.
         return offset <= words && count <= widen(words - offset)
     }
 }
@@ -24,6 +30,7 @@ struct Frame {
         let count = widen(UInt32(littleEndian: bytes.unsafeLoadUnaligned(
             fromByteOffset: 0, as: UInt32.self))) + 1
         guard count <= widen(segmentLimit), count <= widen(Int.max / 8) else { return invalid }
+        // One count-minus-one entry plus N sizes, padded to a whole 64-bit word.
         let header = ((count + 2) / 2) * 8
         guard header <= widen(bytes.byteCount) else { return invalid }
         var total = header
@@ -78,6 +85,7 @@ struct ReadContext: ~Escapable {
         return Segment(start: start, words: Int(words))
     }
 
+    // Caller must have validated a complete word at this absolute byte offset.
     func word(at byte: Int) -> RawPointer {
         RawPointer(UInt64(littleEndian: bytes.unsafeLoadUnaligned(
             fromByteOffset: byte, as: UInt64.self)))

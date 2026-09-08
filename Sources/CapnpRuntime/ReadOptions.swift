@@ -1,6 +1,8 @@
 /// Limits applied to one message arena. The segment cap bounds framing and lookup work.
 public struct ReaderOptions {
+    /// Counts traversed work, including repeated pointer visits and zero-size list elements.
     public var traversalLimitWords: UInt64
+    /// Per-path logical depth; negative values are clamped to zero at initialization.
     public var nestingLimit: Int
     public var segmentLimit: UInt32
 
@@ -21,6 +23,7 @@ public enum ReadError: UInt32 {
     case traversalLimit, nestingLimit, invalidText, invalidIndex, unsupportedDefault
 }
 
+/// Wire list-size codes. Composite layouts come from their tag, not a fixed data stride.
 public enum ElementSize: UInt8 {
     case void, bit, byte, twoBytes, fourBytes, eightBytes, pointer, inlineComposite
 

@@ -1,3 +1,8 @@
+// Each arena owns one budget and first-error slot; every derived view borrows them.
+// Atomics permit mutation through a shared borrow without a heap-owned reference box.
+// Relaxed ordering suffices for these independent counters; it does not make readers
+// a public concurrency API or synchronize access to the caller's message storage.
+
 import Synchronization
 
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
@@ -11,10 +16,13 @@ struct ReadState: ~Copyable {
     }
 
     borrowing func report(_ error: ReadError) {
+        // Keep the first failure: later empty-view fallbacks must not obscure its cause.
         _ = failure.compareExchange(expected: 0, desired: error.rawValue, ordering: .relaxed)
     }
 
     borrowing func charge(_ words: UInt64) -> Bool {
+        // Retry both contention and spurious weak-CAS failure. Subtract only after the
+        // comparison so hostile traversal sizes cannot wrap the unsigned budget.
         var current = remaining.load(ordering: .relaxed)
         while current >= words {
             let result = remaining.weakCompareExchange(
@@ -65,16 +73,22 @@ public struct Arena: ~Copyable, ~Escapable {
         state = ReadState(words: traversalLimitWords, error: valid ? .none : .invalidFrame)
     }
 
+    /// First failure since initialization; fallback values alone do not imply success.
     public var error: ReadError {
         ReadError(rawValue: state.failure.load(ordering: .relaxed)) ?? .invalidPointer
     }
 
+    /// Bytes occupied by the first frame, or zero if framing failed.
     public var consumedByteCount: Int { frame.valid ? frame.byteCount : 0 }
+    /// Shared work budget, not unread input size: following a pointer again charges again.
     public var remainingTraversalWords: UInt64 { state.remaining.load(ordering: .relaxed) }
 
+    /// Reserve additional traversal work; failure records `.traversalLimit`.
     @discardableResult
     public borrowing func charge(words: UInt64) -> Bool { state.charge(words) }
 
+    /// Borrow the root and shared accounting state for the closure. Check `error` afterward,
+    /// even when the closure returns normally: invalid reads return empty/default values.
     public borrowing func withRoot<Result>(
         _ body: (borrowing StructReader) -> Result
     ) -> Result {

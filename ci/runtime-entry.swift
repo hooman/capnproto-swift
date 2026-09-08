@@ -1,3 +1,7 @@
+// An exported entry point makes concrete reader operations reachable by the Embedded
+// compiler. Compiling declarations alone could leave generic bodies uninstantiated and
+// miss allocations. The object is audited by both host and cross-target gates.
+
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 @_cdecl("capnp_embedded_probe")
 public func capnpEmbeddedProbe(_ pointer: UnsafeRawPointer, _ count: Int) -> UInt64 {

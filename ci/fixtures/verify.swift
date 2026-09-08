@@ -1,3 +1,8 @@
+// The same assertions run against C++-encoded messages on the host and compile through
+// generated readers in a separate Embedded module. The exported entry point prevents
+// unused generic paths from making the allocation check vacuous.
+// Modes: 0 = schema defaults, 1 = populated fields, 2 = old wire layout read as new.
+
 import CapnpRuntime
 
 @available(macOS 15, iOS 18, watchOS 11, tvOS 18, visionOS 2, *)

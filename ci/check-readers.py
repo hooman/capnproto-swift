@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""C++ oracle -> plugin -> host and Embedded generated-reader verification.
-Requires Python 3, capnp and a Swift.org toolchain. All products live in --work.
+"""Use the independent C++ encoder as the wire oracle for generated Swift readers.
+Run shared fixture assertions on the host, then compile them across an Embedded module
+boundary to check specialization and allocation freedom. Negative cases cover malformed
+requests, unsupported schemas and escaping lifetimes. Retain all artifacts in --work.
+Requires Python 3, capnp and a Swift.org toolchain.
 """
 import argparse
 import os
@@ -61,6 +64,8 @@ host.mkdir(exist_ok=True)
 run([swiftc, *flags, '-O', '-wmo', '-parse-as-library', '-emit-module', '-emit-object',
      '-module-name', 'CapnpRuntime', '-emit-module-path', host / 'CapnpRuntime.swiftmodule',
      *sources, '-o', host / 'runtime.o'])
+# Standalone executables need the selected toolchain's compatibility libraries on
+# older macOS hosts; compiling successfully does not ensure dyld can find RawSpan support.
 link_flags = []
 for library_path in json.loads(host_target)['paths']['runtimeLibraryPaths']:
     link_flags += ['-Xlinker', '-rpath', '-Xlinker', library_path]
@@ -108,6 +113,9 @@ for name, body in probes.items():
 print('PASS: lifetime positive control and 3 escape rejections', flush=True)
 
 # Compiler diagnostics must be nonzero, actionable, and leave no partial output.
+# TODO(output-tests): cover lexical and symlink output-directory escapes, and inject
+# filesystem failures to verify/report partial multi-file writes. Current rejection
+# cases exercise request/schema validation, not the output filesystem boundary.
 unsupported = {
     'enum': 'enum Color { red @0; }',
     'interface': 'interface Service {}',

@@ -1,9 +1,17 @@
+// Normalize near, single-far and double-far encodings into one target/layout pair,
+// then let the typed accessor validate the entire body before constructing a view.
+// Landing pads and bodies are charged separately; nesting tracks the logical object
+// path, not the number of physical segments crossed. Failures preserve the arena's
+// first error and return empty views so generated getters need no throwing branches.
+
+// Resolution validates the pointer encoding, not the target body extent.
 struct ResolvedPointer {
     let pointer: RawPointer
     let segmentID: UInt32
     let targetByte: Int
 }
 
+/// A borrowed pointer slot. Typed accessors validate and charge each traversal.
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct PointerReader: ~Escapable {
     let context: ReadContext
@@ -19,6 +27,8 @@ public struct PointerReader: ~Escapable {
         self.nestingLimit = nestingLimit
     }
 
+    /// Test the literal wire null without following it. Invalid slots report an error
+    /// and return true; capability pointers are non-null here but dereference as empty.
     public var isNull: Bool {
         guard pointerByte >= 0 else { return true }
         guard let segment = context.segment(segmentID),
@@ -37,6 +47,7 @@ public struct PointerReader: ~Escapable {
             return nil
         }
         var pointer = context.word(at: pointerByte)
+        // Capabilities deliberately behave as empty in readers-only v1; there is no RPC table.
         if pointer.isNull || pointer.kind == .other { return nil }
         guard nestingLimit > 0 else { context.report(.nestingLimit); return nil }
         var id = segmentID
@@ -55,6 +66,8 @@ public struct PointerReader: ~Escapable {
                 context.report(.invalidPointer); return nil
             }
             pointer = context.word(at: origin)
+            // A double-far pad carries an absolute object location and a separate layout
+            // tag. Its tag offset is zero; applying normal relative addressing would be wrong.
             if doubleFar {
                 let tag = context.word(at: origin + 8)
                 guard pointer.kind == .far, !pointer.farIsDoubleFar,
@@ -81,6 +94,7 @@ public struct PointerReader: ~Escapable {
         return ResolvedPointer(pointer: pointer, segmentID: id, targetByte: Int(target))
     }
 
+    /// Open a struct; only nil or a null default pointer is supported in v1.
     @_lifetime(copy self)
     public func structure(default defaultPointer: RawPointer? = nil) -> StructReader {
         let empty = StructReader(context: context)
@@ -120,6 +134,8 @@ public struct PointerReader: ~Escapable {
         var start = resolved.targetByte
         var step = dataBits + pointerCount * 64
         var words: UInt64
+        // Composite pointers count body words, while their tag counts elements. Validate
+        // both extents, allowing advertised padding beyond the occupied element strides.
         if encoding == .inlineComposite {
             words = widen(p.listInlineCompositeWordCount) + 1
             guard segment.contains(start, words: words) else {
@@ -141,13 +157,16 @@ public struct PointerReader: ~Escapable {
                 context.report(.invalidPointer); return empty
             }
         }
+        // Schema evolution may expose a smaller data/pointer prefix of each element.
+        // Preserve the wire stride; packed bits cannot be reinterpreted as struct elements.
         guard (encoding != .bit || expected == .bit),
               (expected != .bit || encoding != .inlineComposite),
               expected.dataBits <= dataBits,
               expected.pointerCount <= pointerCount else {
             context.report(.typeMismatch); return empty
         }
-        // Charge padding/tag words too, plus virtual words for zero-sized elements.
+        // Charge padding/tag words too. Zero-sized elements consume virtual words so
+        // a tiny input cannot request unbounded iteration without exhausting the budget.
         if step == 0 { words += widen(count) }
         guard context.charge(words) else { return empty }
         return ListReader(context: context, startByte: start, count: count, stepBits: step,
@@ -168,6 +187,8 @@ public struct PointerReader: ~Escapable {
     @_lifetime(copy self)
     public func text() -> TextReader {
         let list = list(of: .byte)
+        // Null uses the empty .void sentinel. An encoded byte list still needs a NUL,
+        // even for empty text; a zero-length byte list is therefore malformed.
         if list.count == 0 {
             if list.encoding != .void { context.report(.invalidText) }
             return TextReader(context: context)

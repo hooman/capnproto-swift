@@ -1,3 +1,8 @@
+// Preserve the wire stride separately from the visible element layout. This lets
+// old schemas read prefixes of upgraded struct lists without repacking or allocation.
+// Indexed access also keeps borrowed element lifetimes explicit; these views do not
+// conform to Sequence, whose element requirements do not fit this v1 borrowed API.
+
 /// Indexed view of all list encodings, including primitive/struct schema upgrades.
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct ListReader: ~Escapable {
@@ -48,6 +53,8 @@ public struct ListReader: ~Escapable {
         guard nestingLimit > 0 else {
             context.report(.nestingLimit); return StructReader(context: context)
         }
+        // The list body was charged when opened. Selecting an inline struct consumes
+        // nesting depth, but does not charge the same body words a second time.
         let start = startByte + index * (stepBits / 8)
         return StructReader(context: context, dataStartByte: start, dataSizeBits: dataBits,
                             ptrStartByte: start + dataBits / 8, ptrCount: pointerCount,
@@ -74,6 +81,8 @@ public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable {
     let reader: ListReader
     let zero: Element
 
+    /// Supply the element type's zero value, not a field default: primitive list elements
+    /// have no schema XOR mask. A nonzero value would alter every decoded element.
     @_lifetime(copy reader)
     public init(_ reader: consuming ListReader, zero: Element) {
         self.reader = reader
