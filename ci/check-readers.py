@@ -61,7 +61,10 @@ host.mkdir(exist_ok=True)
 run([swiftc, *flags, '-O', '-wmo', '-parse-as-library', '-emit-module', '-emit-object',
      '-module-name', 'CapnpRuntime', '-emit-module-path', host / 'CapnpRuntime.swiftmodule',
      *sources, '-o', host / 'runtime.o'])
-run([swiftc, *flags, '-O', '-I', host, generated, fixture / 'verify.swift',
+link_flags = []
+for library_path in json.loads(host_target)['paths']['runtimeLibraryPaths']:
+    link_flags += ['-Xlinker', '-rpath', '-Xlinker', library_path]
+run([swiftc, *flags, *link_flags, '-O', '-I', host, generated, fixture / 'verify.swift',
      fixture / 'main.swift', host / 'runtime.o', '-o', host / 'verify'])
 
 full = b"""(boolField = false, text = "hi!", data = 0x"00ff", child = (id = 99, name = "x"),
