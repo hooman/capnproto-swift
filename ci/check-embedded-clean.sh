@@ -30,10 +30,12 @@ NEGCTL="$ROOT/ci/negative-control.swift"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-FLAGS=( -enable-experimental-feature Embedded
+FLAGS=( -swift-version 6
+        -enable-experimental-feature Embedded
         -enable-experimental-feature Lifetimes
         -wmo -no-allocations
         -target "$TARGET"
+        -module-cache-path "$WORK/cache"
         -parse-as-library )
 
 echo "== toolchain =="
@@ -53,6 +55,7 @@ echo "== [1/3] primary gate: compile CapnpRuntime under -no-allocations (must pa
 SRCS=()
 while IFS= read -r f; do SRCS+=("$f"); done < <(find "$SRCDIR" -name '*.swift' | sort)
 if [ "${#SRCS[@]}" -eq 0 ]; then echo "FAIL: no sources under $SRCDIR" >&2; exit 2; fi
+SRCS+=("$ROOT/ci/runtime-entry.swift")
 printf '  source: %s\n' "${SRCS[@]#"$ROOT"/}"
 "$SWIFTC" "${FLAGS[@]}" -c "${SRCS[@]}" -o "$WORK/CapnpRuntime-embedded.o"
 echo "  PASS — compiled clean under Embedded + -no-allocations."
@@ -60,11 +63,11 @@ echo "  PASS — compiled clean under Embedded + -no-allocations."
 echo
 echo "== [2/3] nm audit (secondary): assert no real allocator symbols =="
 if nm "$WORK/CapnpRuntime-embedded.o" \
-     | grep -E '(^| )_(free|posix_memalign|swift_allocObject|swift_slowAlloc)$'; then
+     | grep -E '(^| )_?(free|malloc|posix_memalign|swift_allocObject|swift_slowAlloc|swift_coroFrameAlloc)$'; then
   echo "  FAIL — real allocator symbols present (above)." >&2
   exit 1
 fi
-echo "  PASS — no _free / _posix_memalign / _swift_allocObject / _swift_slowAlloc."
+echo "  PASS — no heap allocator or coroutine allocator symbols."
 
 echo
 echo "== [3/3] negative control: ci/negative-control.swift MUST be rejected (gate has teeth) =="

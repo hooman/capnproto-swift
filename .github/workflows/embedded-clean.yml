@@ -10,12 +10,16 @@ name: embedded-clean
 on:
   push:
     paths:
-      - 'Sources/CapnpRuntime/**'
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
       - 'ci/**'
       - '.github/workflows/embedded-clean.yml'
   pull_request:
     paths:
-      - 'Sources/CapnpRuntime/**'
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
       - 'ci/**'
       - '.github/workflows/embedded-clean.yml'
   workflow_dispatch:
@@ -29,7 +33,7 @@ jobs:
       matrix:
         swift: ["6.3.1", "6.2.4"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: "Install Swift.org ${{ matrix.swift }} toolchain (embedded stdlib; runner Xcode lacks it)"
         run: |
@@ -44,3 +48,27 @@ jobs:
           export SWIFTC="$HOME/Library/Developer/Toolchains/swift-${{ matrix.swift }}-RELEASE.xctoolchain/usr/bin/swiftc"
           chmod +x ci/check-embedded-clean.sh
           ci/check-embedded-clean.sh
+
+      - name: Host tests and generated-reader conformance
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/Library/Developer/Toolchains/swift-${{ matrix.swift }}-RELEASE.xctoolchain/usr/bin:$PATH"
+          brew install capnp
+          swift test
+          python3 ci/check-readers.py --swiftc "$(command -v swiftc)" --plugin .build/debug/capnpc-swift --work /tmp/readers
+          python3 ci/check-cross.py --swiftc "$(command -v swiftc)" --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
+
+  linux:
+    name: "Linux (Swift ${{ matrix.swift }})"
+    runs-on: ubuntu-24.04
+    container: swift:${{ matrix.swift }}-noble
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.3.1", "6.2.4"]
+    steps:
+      - uses: actions/checkout@v5
+      - run: apt-get update && apt-get install -y capnproto python3
+      - run: swift test
+      - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers
+      - run: python3 ci/check-cross.py --swiftc /usr/bin/swiftc --target x86_64-unknown-linux-gnu --generated /tmp/readers/readers.capnp.swift

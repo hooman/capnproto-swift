@@ -23,8 +23,8 @@ public struct RawPointer {
 
     /// Decode a pointer from its little-endian 64-bit word.
     public init(_ word: UInt64) {
-        self.lowWord = UInt32(truncatingIfNeeded: word)
-        self.highWord = UInt32(truncatingIfNeeded: word >> 32)
+        self.lowWord = UInt32(truncatingIfNeeded: word._lowWord)
+        self.highWord = UInt32(truncatingIfNeeded: (word &>> 32)._lowWord)
     }
 
     /// Pointer kind (encoding.md `A`): the low 2 bits of the word.

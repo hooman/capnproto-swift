@@ -1,5 +1,5 @@
 // swift-tools-version: 6.2
-// capnproto-swift — Cap'n Proto for modern Swift (6.3+), Embedded-Swift-capable.
+// capnproto-swift — Cap'n Proto for modern Swift (6.2+), Embedded-Swift-capable.
 //
 // Two targets per decision D-2: an unconstrained host plugin (`capnpc-swift`) and an
 // allocation-free runtime (`CapnpRuntime`). The Embedded build flags
@@ -34,7 +34,8 @@ let package = Package(
         // Host-only code generator. Unconstrained (Foundation allowed, per D-8).
         .executableTarget(
             name: "capnpc-swift",
-            dependencies: ["CapnpRuntime"]
+            dependencies: ["CapnpRuntime"],
+            swiftSettings: [.enableExperimentalFeature("Lifetimes")]
         ),
         // Host tests for the runtime (full stdlib; the Embedded gate is a separate
         // compile check in ci/). Needs `Lifetimes` because it constructs the
