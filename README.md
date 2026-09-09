@@ -57,9 +57,10 @@ storage through `withUnsafeBytes`.
 schema defaults without an error. Malformed pointers, invalid UTF-8/text terminators,
 type mismatches, invalid list indexes, and exhausted budgets return empty/default
 values and set the error. Check it **after traversal** before accepting results.
-Unvisited fields are not eagerly validated. Capability pointers read as null in v1.
+Unvisited fields are not eagerly validated. Capability pointers dereference as empty
+without an error in v1; `PointerReader.isNull` still tests the literal wire null.
 
-`ReaderOptions` defaults to an 8-million-word traversal budget, nesting depth 64,
+`ReaderOptions` defaults to an 8,388,608-word (64 MiB) traversal budget, nesting depth 64,
 and 512 segments. Repeated pointer reads, including through copied views, consume
 the shared budget. Lists of zero-sized elements consume virtual words to prevent
 amplification. `consumedByteCount` identifies the first frame when bytes contain
@@ -91,7 +92,7 @@ Non-Apple readers have no OS availability gate.
 ```sh
 swift test
 SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-embedded-clean.sh
-python3 ci/check-readers.py --swiftc /path/to/swiftc \
+python3 ci/check-readers.py --swiftc /path/to/swiftc --capnp /path/to/capnp \
   --plugin .build/debug/capnpc-swift --work /tmp/readers
 python3 ci/check-cross.py --swiftc /path/to/swiftc \
   --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
@@ -104,6 +105,28 @@ target OS toolchain. CI covers host tests, C++ oracle messages, compile-time lif
 rejections, generated readers across a module boundary, allocator symbol audits,
 and an allocating negative control. ARMv7E-M and x86-64 Linux compile probes do not
 substitute for execution on physical embedded hardware.
+
+### Platform evidence
+
+| Target | Verified with Swift 6.2.4 and 6.3.1 | Remaining validation |
+|---|---|---|
+| macOS host | Runtime tests, generator and C++ fixtures; Embedded object checks | Older supported Apple OS/device execution |
+| Linux x86-64 (glibc) | Host execution and Embedded object checks in CI | Additional architectures and distributions |
+| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit and negative control | Firmware linking and device execution |
+| Static Linux SDK (musl) | Not yet verified | Separate SDK build, static link and Linux execution |
+| WebAssembly / WASI | Not yet verified | Full and Embedded SDK builds, imports audit and execution |
+
+Snapshot or vendor compilers reporting a newer Swift version are not automatically
+qualified by these results. Static linking, Embedded mode and allocation freedom are
+separate properties; a Linux glibc check proves neither musl nor Wasm support.
+
+### Known follow-up work
+
+Schema `sourceInfo` documentation is not yet propagated into generated Swift comments.
+Filesystem rejection tests do not yet cover path/symlink escapes or injected partial-write
+failures. These gaps are marked at the relevant decoder and verification code. The
+internal trusted scalar-fixture initializer is also marked for relocation into tests.
+Unsupported v1 features listed above are deliberate scope limits, not silent stubs.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the storage, lifetime, and validation model.
 Licensed under [MIT](LICENSE).

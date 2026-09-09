@@ -12,7 +12,7 @@ The closure result must be escapable, so reader views cannot leave that scope.
 
 Reader views are immutable, copyable, and nonescapable. Copying a view copies
 positions and lifetime dependencies, not the message or limiter. This is deliberate:
-Swift 6.3.1 synthesizes coroutine accessors with allocator references when computed
+The verified Swift 6.3.1 build synthesizes coroutine accessors with allocator references when computed
 properties return noncopyable views. Copyable views compile without those allocator
 references and keep the compiler-enforced lifetime proof. Arena ownership remains
 unique. Lifetime-positive and escape-negative compiler fixtures guard this boundary.
@@ -65,6 +65,8 @@ features produce a nonzero exit with a `capnpc-swift:` diagnostic. Output filena
 must be relative; normalized/symlink-resolved destinations must stay under the
 compiler output directory. Rendering validates all requested files before writes;
 filesystem errors during a multi-file write can still leave earlier files updated.
+Path validation assumes the output directory is not concurrently mutated; it is not a
+race-resistant filesystem sandbox. Schema source documentation is not yet emitted.
 
 File IDs namespace generated readers. Unions use a raw discriminant enum without
 borrowed associated values; group readers share the parent struct layout. The
@@ -82,3 +84,21 @@ fixtures and compiles generated readers against a separately compiled runtime.
 The Embedded gate requires `-no-allocations` compilation, absence of allocator
 symbols, and rejection of an allocating negative control. These tests are a bounded
 suite, not exhaustive wire-format certification or a security audit.
+
+## Revisiting implementation choices
+
+Swift 6.2 remains the package floor; the release compilers exercised by CI are 6.2.4
+and 6.3.1. Experimental `Lifetimes` and `Embedded` features are explicit build inputs.
+The no-existentials/no-Foundation policy describes this runtime, not every capability
+of newer Embedded Swift releases.
+
+Revisit a workaround with a concrete replacement: preserve error/default behavior,
+run the generated cross-module and lifetime tests, compile with -no-allocations, and
+audit emitted symbols on every supported target. A compiler accepting a new syntax
+or a proposal being accepted is insufficient evidence to change these guarantees.
+
+For a new Embedded toolchain, inspect its platform ABI and allocator entry points
+before trusting the existing symbol pattern. For a new SDK, separately prove build,
+link and execution: current Linux glibc and ARM object checks do not establish Static
+Linux SDK (musl), Wasm/WASI, or physical-device support. Host allocation by the compiler,
+fixture encoder and test harness does not relax the runtime's allocation constraint.
