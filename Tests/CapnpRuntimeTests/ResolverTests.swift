@@ -322,4 +322,93 @@ struct ResolverTests {
         }
     }
 
+    // ListReader's index guards are exercised through PointerReader.list(of:) above with
+    // in-range access; these call the raw ListReader accessors out of range directly,
+    // since generated code cannot itself construct an out-of-range index.
+    @Test func listIndexOutOfRangeGuards() {
+        guard #available(macOS 15, *) else { return }
+        let fixture = frame([[structWord(pointers: 1), listWord(size: 4, count: 2),
+                              UInt64(11) | UInt64(22) << 32]])
+        fixture.withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in root.pointerField(at: 0).list(of: .fourBytes).void(at: 0) }
+            #expect(arena.error == .none)
+        }
+        fixture.withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in root.pointerField(at: 0).list(of: .fourBytes).void(at: 2) }
+            #expect(arena.error == .invalidIndex)
+        }
+        fixture.withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                let list = root.pointerField(at: 0).list(of: .fourBytes)
+                #expect(list.data(at: -1, default: UInt32(7)) == 7)
+            }
+            #expect(arena.error == .invalidIndex)
+        }
+        fixture.withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                let list = root.pointerField(at: 0).list(of: .fourBytes)
+                #expect(list.structure(at: 9).data(at: 0, default: UInt64(9)) == 9)
+            }
+            #expect(arena.error == .invalidIndex)
+        }
+        fixture.withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                #expect(root.pointerField(at: 0).list(of: .fourBytes).pointer(at: 9).isNull == true)
+            }
+            #expect(arena.error == .invalidIndex)
+        }
+    }
+
+    @Test func listStructureRejectsBitEncoding() {
+        guard #available(macOS 15, *) else { return }
+        // structure(at:) refuses a bit list explicitly: packed bits are not struct data/
+        // pointer sections, unlike every other encoding, which structure(at:) will address
+        // directly (correctly or not) without an encoding check of its own.
+        frame([[structWord(pointers: 1), listWord(size: 1, count: 8), UInt64(0)]])
+            .withUnsafeBytes { bytes in
+                let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+                arena.withRoot { root in
+                    let list = root.pointerField(at: 0).list(of: .bit)
+                    #expect(list.structure(at: 0).data(at: 0, default: UInt64(5)) == 5)
+                }
+                #expect(arena.error == .typeMismatch)
+            }
+    }
+
+    @Test func listPrimitiveDefaultsWhenRequestedTypeIsWiderThanStored() {
+        guard #available(macOS 15, *) else { return }
+        // A direct generic data(at:default:) call for a type wider than the list's own
+        // element defaults rather than reading past the element stride into the next one.
+        frame([[structWord(pointers: 1), listWord(size: 4, count: 1), UInt64(42)]])
+            .withUnsafeBytes { bytes in
+                let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+                arena.withRoot { root in
+                    let list = root.pointerField(at: 0).list(of: .fourBytes)
+                    #expect(list.data(at: 0, default: UInt64(99)) == 99)
+                }
+                #expect(arena.error == .none)
+            }
+    }
+
+    @Test func primitiveListWrapsListReader() {
+        guard #available(macOS 15, *) else { return }
+        frame([[structWord(pointers: 1), listWord(size: 4, count: 2),
+               UInt64(11) | UInt64(22) << 32]])
+            .withUnsafeBytes { bytes in
+                let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+                arena.withRoot { root in
+                    let list = PrimitiveList<UInt32>(
+                        root.pointerField(at: 0).list(of: .fourBytes), zero: 0)
+                    #expect(list.count == 2)
+                    #expect(list[0] == 11)
+                    #expect(list[1] == 22)
+                }
+                #expect(arena.error == .none)
+            }
+    }
 }

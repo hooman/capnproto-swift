@@ -1,0 +1,17 @@
+@Tutorials(name: "Cap'n Proto for Swift") {
+    @Intro(title: "Meet Cap'n Proto") {
+        Cap'n Proto readers for Swift: a host code generator and an allocation-free
+        runtime, built so reading a message never copies it. Coming from Protocol
+        Buffers? Start with <doc:WhyCapnProto> for what's actually different and why
+        it matters most on Embedded Swift targets. Ready to write code? Jump straight
+        into the tutorial below.
+    }
+
+    @Chapter(name: "Getting Started") {
+        Generate readers from a schema and decode a real message, from an empty
+        package to reading text, lists, and handling malformed input.
+
+        @Image(source: "chapter-icon.png", alt: "A stylized forward arrow, representing reading a message forward through its bytes.")
+        @TutorialReference(tutorial: "doc:GettingStarted")
+    }
+}

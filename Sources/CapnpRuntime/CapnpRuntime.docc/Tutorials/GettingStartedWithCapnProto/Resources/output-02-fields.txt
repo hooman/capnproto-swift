@@ -1,0 +1,4 @@
+$ swift run
+id: 1
+name: Ada
+hobbies: ["math", "engines"]

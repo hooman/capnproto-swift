@@ -42,7 +42,11 @@ fi
 echo
 echo "== [1/3] primary gate: compile CapnpRuntime under -no-allocations (must pass) =="
 SRCS=()
-while IFS= read -r f; do SRCS+=("$f"); done < <(find "$SRCDIR" -name '*.swift' | sort)
+# Exclude *.docc: SwiftPM itself treats any such directory as a documentation catalog,
+# not a source directory, and this project's catalog carries standalone tutorial code
+# snapshots (intentionally not part of the CapnpRuntime module) that would otherwise
+# leak into this gate's naive filesystem glob.
+while IFS= read -r f; do SRCS+=("$f"); done < <(find "$SRCDIR" -name '*.swift' -not -path '*.docc/*' | sort)
 if [ "${#SRCS[@]}" -eq 0 ]; then echo "FAIL: no sources under $SRCDIR" >&2; exit 2; fi
 SRCS+=("$ROOT/ci/runtime-entry.swift")
 printf '  source: %s\n' "${SRCS[@]#"$ROOT"/}"

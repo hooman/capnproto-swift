@@ -1,0 +1,157 @@
+@Tutorial(time: 20) {
+    @Intro(title: "Read your first Cap'n Proto message") {
+        Generate Swift readers from a Cap'n Proto schema, decode a message without
+        copying it, and see how the runtime reports a malformed or oversized input
+        instead of trusting it.
+
+        You'll need Swift 6.2 or later with the `Lifetimes` experimental feature, and
+        the upstream `capnp` compiler (`brew install capnp`, or your platform's
+        package). Everything here targets host development; see
+        <doc:WhyCapnProto> for what changes on an Embedded Swift target.
+    }
+
+    @Section(title: "Create the package") {
+        @ContentAndMedia {
+            Start from a plain SwiftPM executable — nothing capnp-specific yet.
+        }
+
+        @Steps {
+            @Step {
+                Create a new executable package with `swift package init --type
+                executable --name GettingStarted`.
+
+                @Code(name: "Package.swift", file: "01-Package.swift")
+            }
+        }
+    }
+
+    @Section(title: "Write a schema") {
+        @ContentAndMedia {
+            A Cap'n Proto schema looks a little like a protobuf `.proto` file: a typed
+            struct with numbered fields. The number after `@` is the field's *ordinal* —
+            capnp's schema-evolution mechanism — not a wire offset; don't reuse or
+            reorder one once you've shipped a message using it.
+        }
+
+        @Steps {
+            @Step {
+                Add `Person.capnp` next to your Swift sources, in
+                `Sources/GettingStarted/`. The `@0x...` line is a random 64-bit file ID
+                that `capnp id` generates for you; every schema file needs one, and
+                collisions are what capnp's own generator would refuse to compile.
+
+                @Code(name: "Person.capnp", file: "02-Person.capnp")
+            }
+        }
+    }
+
+    @Section(title: "Wire up the generator") {
+        @ContentAndMedia {
+            Depend on `capnproto-swift` and attach its `CapnpGeneratorPlugin` to your
+            target. The plugin runs `capnp` for you at build time — nothing generated
+            gets checked in, and editing the schema regenerates automatically.
+        }
+
+        @Steps {
+            @Step {
+                Add the dependency, the plugin, and the `Lifetimes` experimental
+                feature every target using the readers needs — a build-tool plugin
+                can't add settings to its own host target, so this line doesn't come
+                for free. For a real project, pin `capnproto-swift` to a specific
+                commit revision (`.package(url:revision:)`) rather than a branch, so a
+                schema change upstream can't silently change your build.
+
+                @Code(name: "Package.swift", file: "03-Package.swift")
+            }
+            @Step {
+                Build the package with `swift build`. The plugin compiles
+                `Person.capnp` into `Person.capnp.swift` before your code compiles.
+
+                SwiftPM will warn that the `.capnp` file itself is `unhandled` — that's
+                expected; the plugin consumes it, not the target. Don't "fix" that
+                warning by excluding the schema — that stops the plugin from seeing it
+                at all, and generates nothing.
+            }
+        }
+    }
+
+    @Section(title: "Decode a message") {
+        @ContentAndMedia {
+            Every reader borrows its message's bytes directly — there's no separate
+            decode step that produces a copy. Reads happen inside `Arena.withRoot`,
+            and nothing a reader hands back can outlive that scope; the compiler
+            enforces it.
+        }
+
+        @Steps {
+            @Step {
+                Replace `main.swift` with a decoder for a hardcoded message (bytes an
+                encoder — here, the `capnp` CLI's `encode` command — already produced).
+                `Capnp_9c3f8a1b2c4d5e6f` is the schema's generated namespace: a
+                collision-resistant name built from the file ID in `Person.capnp`.
+
+                @Code(name: "main.swift", file: "04-main.swift")
+            }
+            @Step {
+                Run it with `swift run`.
+
+                @Code(name: "Output", file: "output-01-id.txt")
+            }
+        }
+    }
+
+    @Section(title: "Read text and lists") {
+        @ContentAndMedia {
+            Text and list fields work the same way scalars do: `TextReader` exposes
+            validated UTF-8 bytes without copying them, and a list reader gives you
+            `count` plus indexed access. Copy a value out only once you actually need
+            it to outlive the decode scope.
+        }
+
+        @Steps {
+            @Step {
+                Add a small helper to copy a `TextReader` into a `String`, and read
+                `name` and the `hobbies` list the same way you read `id`.
+
+                @Code(name: "main.swift", file: "05-main.swift")
+            }
+            @Step {
+                Run it again with `swift run`.
+
+                @Code(name: "Output", file: "output-02-fields.txt")
+            }
+        }
+    }
+
+    @Section(title: "Handle malformed input") {
+        @ContentAndMedia {
+            `arena.error` records the *first* failure and nothing more — later reads
+            keep returning schema defaults rather than crashing, so a single malformed
+            field doesn't take down a whole message. Always check `arena.error`
+            **after** traversal, once you've read everything you intend to trust — not
+            before. `ReaderOptions` also bounds how much work a decode can be made to
+            do: a tiny `traversalLimitWords` here stands in for a message crafted to
+            make a naive parser do way more work than its byte count suggests.
+        }
+
+        @Steps {
+            @Step {
+                Accept `ReaderOptions`, and try three inputs: a frame truncated
+                mid-message, the real message decoded under an unreasonably small
+                traversal budget, and the real message decoded normally.
+
+                @Code(name: "main.swift", file: "06-main.swift")
+            }
+            @Step {
+                Run it once more with `swift run`. The truncated frame fails before
+                `withRoot` even runs. Under the tiny budget, the struct itself still
+                resolves, but not far enough to reach real field data — `id` and `name`
+                come back as their schema defaults, and `arena.error` catches it.
+                Neither case is a crash, an exception, or undefined behavior; both are
+                a value you're expected to check.
+
+                @Code(name: "Output", file: "output-03-errors.txt")
+            }
+        }
+    }
+}

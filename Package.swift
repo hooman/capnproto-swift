@@ -5,6 +5,10 @@
 
 import PackageDescription
 
+// swift-docc-plugin is a dev-only dependency: it adds the
+// `generate-documentation`/`preview-documentation` command plugins used to build this
+// package's DocC catalog. It never links into CapnpRuntime or capnpc-swift.
+
 let package = Package(
     name: "capnproto-swift",
     // Keep POD wire utilities usable below the reader's OS requirement. Reader APIs
@@ -14,6 +18,11 @@ let package = Package(
     products: [
         .library(name: "CapnpRuntime", targets: ["CapnpRuntime"]),
         .executable(name: "capnpc-swift", targets: ["capnpc-swift"]),
+        // Build-time schema generation for consuming targets.
+        .plugin(name: "CapnpGeneratorPlugin", targets: ["CapnpGeneratorPlugin"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.3.0")
     ],
     targets: [
         // Allocation-free, Foundation-free runtime. Must stay Embedded-clean.
@@ -27,6 +36,12 @@ let package = Package(
             name: "capnpc-swift",
             dependencies: ["CapnpRuntime"],
             swiftSettings: [.enableExperimentalFeature("Lifetimes")]
+        ),
+        // Locates capnp on the host and lets it drive capnpc-swift per schema.
+        .plugin(
+            name: "CapnpGeneratorPlugin",
+            capability: .buildTool(),
+            dependencies: ["capnpc-swift"]
         ),
         // Host semantic tests use the full standard library; ci/ separately checks Embedded.
         .testTarget(

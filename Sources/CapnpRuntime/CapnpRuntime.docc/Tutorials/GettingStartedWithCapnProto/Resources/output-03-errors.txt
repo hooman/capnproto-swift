@@ -1,0 +1,9 @@
+$ swift run
+--- a message truncated mid-frame ---
+could not even read the frame: invalidFrame
+--- the same message, but with almost no traversal budget ---
+id: 0, name:
+decode error after traversal: traversalLimit
+--- the original message again ---
+id: 1, name: Ada
+clean decode
