@@ -4,6 +4,7 @@
 // compiler to reject escaping reader lifetimes.
 
 import Testing
+
 @testable import CapnpRuntime
 
 private func writeLE<T: FixedWidthInteger>(_ value: T, to bytes: inout [UInt8], at offset: Int) {

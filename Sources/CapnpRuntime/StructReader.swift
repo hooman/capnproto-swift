@@ -13,9 +13,11 @@ public struct StructReader: ~Escapable {
     let nestingLimit: Int
 
     @_lifetime(copy context)
-    init(context: ReadContext, dataStartByte: Int = 0, dataSizeBits: Int = 0,
-         ptrStartByte: Int = 0, ptrCount: Int = 0, segmentID: UInt32 = 0,
-         nestingLimit: Int = 0) {
+    init(
+        context: ReadContext, dataStartByte: Int = 0, dataSizeBits: Int = 0,
+        ptrStartByte: Int = 0, ptrCount: Int = 0, segmentID: UInt32 = 0,
+        nestingLimit: Int = 0
+    ) {
         self.context = context
         self.dataStartByte = dataStartByte
         self.dataSizeBits = dataSizeBits
@@ -30,13 +32,17 @@ public struct StructReader: ~Escapable {
     // TODO(test-fixtures): move trusted fixture construction into the test target and
     // remove this initializer from production sources.
     @_lifetime(borrow arena)
-    init(arena: borrowing Arena, dataStartByte: Int, dataSizeBits: Int,
-         ptrStartByte: Int, ptrCount: Int, nestingLimit: Int = Wire.nestingLimit) {
-        self.init(context: ReadContext(bytes: arena.bytes, state: nil,
-                                      frame: arena.frame, baseID: arena.segmentID),
-                  dataStartByte: dataStartByte, dataSizeBits: dataSizeBits,
-                  ptrStartByte: ptrStartByte, ptrCount: ptrCount,
-                  segmentID: arena.segmentID, nestingLimit: nestingLimit)
+    init(
+        arena: borrowing Arena, dataStartByte: Int, dataSizeBits: Int,
+        ptrStartByte: Int, ptrCount: Int, nestingLimit: Int = Wire.nestingLimit
+    ) {
+        self.init(
+            context: ReadContext(
+                bytes: arena.bytes, state: nil,
+                frame: arena.frame, baseID: arena.segmentID),
+            dataStartByte: dataStartByte, dataSizeBits: dataSizeBits,
+            ptrStartByte: ptrStartByte, ptrCount: ptrCount,
+            segmentID: arena.segmentID, nestingLimit: nestingLimit)
     }
 
     /// Read an offset measured in units of T (bits for Bool), applying the schema XOR mask.
@@ -45,9 +51,11 @@ public struct StructReader: ~Escapable {
         let width = T.sizeInBits
         // Divide before multiplying the field offset to avoid overflow on invalid offsets.
         guard width > 0, offset >= 0, dataSizeBits >= width,
-              offset <= (dataSizeBits - width) / width else { return value }
-        return T.loadUnmasked(from: context.bytes,
-                              atBitOffset: dataStartByte * 8 + offset * width, default: value)
+            offset <= (dataSizeBits - width) / width
+        else { return value }
+        return T.loadUnmasked(
+            from: context.bytes,
+            atBitOffset: dataStartByte * 8 + offset * width, default: value)
     }
 
     public func pointer(at index: Int) -> RawPointer {
@@ -57,9 +65,10 @@ public struct StructReader: ~Escapable {
 
     @_lifetime(copy self)
     public func pointerField(at index: Int) -> PointerReader {
-        PointerReader(context: context, segmentID: segmentID,
-                      pointerByte: index >= 0 && index < ptrCount ? ptrStartByte + index * 8 : -1,
-                      nestingLimit: nestingLimit)
+        PointerReader(
+            context: context, segmentID: segmentID,
+            pointerByte: index >= 0 && index < ptrCount ? ptrStartByte + index * 8 : -1,
+            nestingLimit: nestingLimit)
     }
 
     /// Select an active union member, or an empty view whose fields read their defaults.
@@ -73,8 +82,9 @@ public struct StructReader: ~Escapable {
     /// A second view of the same struct, used for generated group/union readers.
     @_lifetime(copy self)
     public func borrowed() -> StructReader {
-        StructReader(context: context, dataStartByte: dataStartByte, dataSizeBits: dataSizeBits,
-                     ptrStartByte: ptrStartByte, ptrCount: ptrCount,
-                     segmentID: segmentID, nestingLimit: nestingLimit)
+        StructReader(
+            context: context, dataStartByte: dataStartByte, dataSizeBits: dataSizeBits,
+            ptrStartByte: ptrStartByte, ptrCount: ptrCount,
+            segmentID: segmentID, nestingLimit: nestingLimit)
     }
 }

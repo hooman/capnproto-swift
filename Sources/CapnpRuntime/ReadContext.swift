@@ -37,8 +37,9 @@ struct Frame {
             total += widen(words) * 8
             guard total <= widen(bytes.byteCount) else { return invalid }
         }
-        return Frame(headerBytes: Int(header._lowWord), segmentCount: UInt32(count._lowWord),
-                     byteCount: Int(total._lowWord), valid: true)
+        return Frame(
+            headerBytes: Int(header._lowWord), segmentCount: UInt32(count._lowWord),
+            byteCount: Int(total._lowWord), valid: true)
     }
 }
 

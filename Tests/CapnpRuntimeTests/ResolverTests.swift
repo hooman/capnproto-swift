@@ -3,6 +3,7 @@
 // directed cases alongside the independent C++ encoder checks in ci/check-readers.py.
 
 import Testing
+
 @testable import CapnpRuntime
 
 private func structWord(_ offset: Int32 = 0, data: UInt16 = 0, pointers: UInt16 = 0) -> UInt64 {
@@ -46,7 +47,8 @@ struct ResolverTests {
 
     @Test(arguments: [false, true])
     func farRoots(double: Bool) {
-        let segments: [[UInt64]] = double
+        let segments: [[UInt64]] =
+            double
             ? [[farWord(1, double: true)], [farWord(2), structWord(data: 1)], [99]]
             : [[farWord(1)], [structWord(data: 1), 99]]
         frame(segments).withUnsafeBytes { bytes in
@@ -62,7 +64,8 @@ struct ResolverTests {
             .withUnsafeBytes { bytes in
                 let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
                 arena.withRoot { root in
-                    #expect(root.pointerField(at: 0).structure().data(at: 0, default: UInt64(0)) == 123)
+                    #expect(
+                        root.pointerField(at: 0).structure().data(at: 0, default: UInt64(0)) == 123)
                 }
                 #expect(arena.error == .none)
             }
@@ -70,7 +73,7 @@ struct ResolverTests {
 
     @Test(arguments: [
         [UInt8](), [0, 0, 0, 0], [255, 255, 255, 255, 0, 0, 0, 0],
-        [0, 0, 0, 0, 255, 255, 255, 127], [1, 0, 0, 0, 0, 0, 0, 0]
+        [0, 0, 0, 0, 255, 255, 255, 127], [1, 0, 0, 0, 0, 0, 0, 0],
     ])
     func invalidFrames(_ fixture: [UInt8]) {
         fixture.withUnsafeBytes { bytes in
@@ -89,8 +92,9 @@ struct ResolverTests {
             #expect(arena.error == .none)
         }
         frame([[0], []]).withUnsafeBytes { bytes in
-            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
-                              options: ReaderOptions(segmentLimit: 1))
+            let arena = Arena(
+                framedBytes: RawSpan(_unsafeBytes: bytes),
+                options: ReaderOptions(segmentLimit: 1))
             #expect(arena.error == .invalidFrame)
         }
     }
@@ -104,7 +108,7 @@ struct ResolverTests {
         [[farWord(1, double: true)], [structWord(), structWord(data: 1)], [0]],
         [[farWord(1, double: true)], [farWord(2, double: true), structWord(data: 1)], [0]],
         [[farWord(1, double: true)], [farWord(2), structWord(1, data: 1)], [0]],
-        [[farWord(1)], [farWord(0)]]
+        [[farWord(1)], [farWord(0)]],
     ])
     func invalidPointerRanges(_ segments: [[UInt64]]) {
         frame(segments).withUnsafeBytes { bytes in
@@ -117,8 +121,9 @@ struct ResolverTests {
     @Test func sharedTraversalBudgetAndNesting() {
         let fixture = frame([[structWord(pointers: 1), structWord(-1, pointers: 1)]])
         fixture.withUnsafeBytes { bytes in
-            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
-                              options: ReaderOptions(traversalLimitWords: 2))
+            let arena = Arena(
+                framedBytes: RawSpan(_unsafeBytes: bytes),
+                options: ReaderOptions(traversalLimitWords: 2))
             arena.withRoot { root in
                 let child = root.pointerField(at: 0).structure()
                 #expect(child.pointerField(at: 0).isNull == false)
@@ -129,8 +134,9 @@ struct ResolverTests {
             #expect(arena.remainingTraversalWords == 0)
         }
         fixture.withUnsafeBytes { bytes in
-            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
-                              options: ReaderOptions(nestingLimit: 2))
+            let arena = Arena(
+                framedBytes: RawSpan(_unsafeBytes: bytes),
+                options: ReaderOptions(nestingLimit: 2))
             arena.withRoot { root in
                 let child = root.pointerField(at: 0).structure()
                 #expect(child.pointerField(at: 0).isNull == false)
@@ -142,12 +148,14 @@ struct ResolverTests {
 
     @Test(arguments: [UInt8(0), UInt8(7)])
     func zeroSizedAmplification(_ encoding: UInt8) {
-        let payload: [UInt64] = encoding == 0
+        let payload: [UInt64] =
+            encoding == 0
             ? [listWord(size: 0, count: 100)]
             : [listWord(size: 7, count: 0), UInt64(100 << 2)]
         frame([[structWord(pointers: 1)] + payload]).withUnsafeBytes { bytes in
-            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
-                              options: ReaderOptions(traversalLimitWords: 10))
+            let arena = Arena(
+                framedBytes: RawSpan(_unsafeBytes: bytes),
+                options: ReaderOptions(traversalLimitWords: 10))
             arena.withRoot { root in
                 #expect(root.pointerField(at: 0).list(of: .inlineComposite).count == 0)
             }
@@ -167,8 +175,7 @@ struct ResolverTests {
         } else {
             let bits = [0, 1, 8, 16, 32, 64][Int(size)]
             payload = [listWord(size: size, count: 2), 1]
-            if bits == 64 { payload.append(2) }
-            else { payload[1] |= UInt64(1) << bits }
+            if bits == 64 { payload.append(2) } else { payload[1] |= UInt64(1) << bits }
         }
         frame([[structWord(pointers: 1)] + payload]).withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
@@ -182,7 +189,9 @@ struct ResolverTests {
                 case 3: #expect(list.data(at: 1, default: UInt16(0)) == 1)
                 case 4: #expect(list.data(at: 1, default: UInt32(0)) == 1)
                 case 5: #expect(list.data(at: 1, default: UInt64(0)) == 2)
-                case 6: #expect(list.pointer(at: 0).isNull == false); #expect(list.pointer(at: 1).isNull == true)
+                case 6:
+                    #expect(list.pointer(at: 0).isNull == false)
+                    #expect(list.pointer(at: 1).isNull == true)
                 default: #expect(list.structure(at: 1).data(at: 0, default: UInt64(0)) == 22)
                 }
             }
@@ -191,7 +200,7 @@ struct ResolverTests {
     }
 
     @Test func schemaListUpgrades() {
-        frame([[structWord(pointers: 1), listWord(size: 3, count: 2), 0x00220011]])
+        frame([[structWord(pointers: 1), listWord(size: 3, count: 2), 0x0022_0011]])
             .withUnsafeBytes { bytes in
                 let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
                 arena.withRoot { root in
@@ -201,29 +210,35 @@ struct ResolverTests {
                 }
                 #expect(arena.error == .none)
             }
-        frame([[structWord(pointers: 1), listWord(size: 7, count: 4),
-                structWord(2, data: 1, pointers: 1), 11, 0, 22, 0]])
-            .withUnsafeBytes { bytes in
-                let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
-                arena.withRoot { root in
-                    let primitive = root.pointerField(at: 0).list(of: .twoBytes)
-                    #expect(primitive.data(at: 1, default: UInt16(0)) == 22)
-                    #expect(root.pointerField(at: 0).list(of: .pointer).pointer(at: 1).isNull == true)
-                }
-                #expect(arena.error == .none)
+        frame([
+            [
+                structWord(pointers: 1), listWord(size: 7, count: 4),
+                structWord(2, data: 1, pointers: 1), 11, 0, 22, 0,
+            ]
+        ])
+        .withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                let primitive = root.pointerField(at: 0).list(of: .twoBytes)
+                #expect(primitive.data(at: 1, default: UInt16(0)) == 22)
+                #expect(root.pointerField(at: 0).list(of: .pointer).pointer(at: 1).isNull == true)
             }
+            #expect(arena.error == .none)
+        }
     }
 
     @Test(arguments: [
         [listWord(size: 7, count: 1), structWord(2, data: 1), 0],
         [listWord(size: 7, count: 0), UInt64(1)],
-        [listWord(size: 5, count: 0x1fffffff)],
-        [listWord(-10, size: 2, count: 1)]
+        [listWord(size: 5, count: 0x1fff_ffff)],
+        [listWord(-10, size: 2, count: 1)],
     ])
     func malformedLists(_ payload: [UInt64]) {
         frame([[structWord(pointers: 1)] + payload]).withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
-            arena.withRoot { root in #expect(root.pointerField(at: 0).list(of: .inlineComposite).count == 0) }
+            arena.withRoot { root in
+                #expect(root.pointerField(at: 0).list(of: .inlineComposite).count == 0)
+            }
             #expect(arena.error == .invalidPointer)
         }
     }
@@ -231,7 +246,7 @@ struct ResolverTests {
     @Test(arguments: [
         [UInt8(0x68), 0x69, 0], [0xc3, 0xa9, 0], [0xf0, 0x9f, 0x98, 0x80, 0],
         [0xc0, 0x80, 0], [0xed, 0xa0, 0x80, 0], [0xf4, 0x90, 0x80, 0x80, 0],
-        [0xe2, 0x82, 0], [0xff, 0], [0x68, 0x69], []
+        [0xe2, 0x82, 0], [0xff, 0], [0x68, 0x69], [],
     ])
     func textValidation(_ text: [UInt8]) {
         var word: UInt64 = 0
@@ -239,7 +254,8 @@ struct ResolverTests {
         frame([[structWord(pointers: 1), listWord(size: 2, count: UInt32(text.count)), word]])
             .withUnsafeBytes { bytes in
                 let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
-                let valid = text.last == 0 && String(validating: text.dropLast(), as: UTF8.self) != nil
+                let valid =
+                    text.last == 0 && String(validating: text.dropLast(), as: UTF8.self) != nil
                 arena.withRoot { root in
                     let reader = root.pointerField(at: 0).text()
                     #expect(reader.count == (valid ? text.count - 1 : 0))
@@ -249,11 +265,16 @@ struct ResolverTests {
             }
     }
     @Test func copiedReadersShareBudgetAndListNesting() {
-        let fixture = frame([[structWord(pointers: 1), listWord(size: 7, count: 1),
-                              structWord(1, data: 1), 42]])
+        let fixture = frame([
+            [
+                structWord(pointers: 1), listWord(size: 7, count: 1),
+                structWord(1, data: 1), 42,
+            ]
+        ])
         fixture.withUnsafeBytes { bytes in
-            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
-                              options: ReaderOptions(traversalLimitWords: 3))
+            let arena = Arena(
+                framedBytes: RawSpan(_unsafeBytes: bytes),
+                options: ReaderOptions(traversalLimitWords: 3))
             arena.withRoot { root in
                 let copy = root
                 #expect(root.pointerField(at: 0).list(of: .inlineComposite).count == 1)
@@ -262,8 +283,9 @@ struct ResolverTests {
             #expect(arena.error == .traversalLimit)
         }
         fixture.withUnsafeBytes { bytes in
-            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
-                              options: ReaderOptions(nestingLimit: 2))
+            let arena = Arena(
+                framedBytes: RawSpan(_unsafeBytes: bytes),
+                options: ReaderOptions(nestingLimit: 2))
             arena.withRoot { root in
                 let list = root.pointerField(at: 0).list(of: .inlineComposite)
                 #expect(list.count == 1)
@@ -274,19 +296,20 @@ struct ResolverTests {
     }
 
     @Test func deterministicMalformedTraversal() {
-        var random: UInt64 = 0xdecafbad12345678
+        var random: UInt64 = 0xdeca_fbad_1234_5678
         func next() -> UInt64 {
-            random = random &* 6364136223846793005 &+ 1442695040888963407
+            random = random &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
             return random
         }
         for _ in 0..<2000 {
             var words: [UInt64] = [structWord(pointers: 8)]
             for _ in 0..<16 { words.append(next()) }
             // Some pointers are near enough to reach payload rather than fail immediately.
-            for i in 1...4 { words[i] = (words[i] & 0xffffffff00000003) | UInt64(i * 4) }
+            for i in 1...4 { words[i] = (words[i] & 0xffff_ffff_0000_0003) | UInt64(i * 4) }
             frame([words]).withUnsafeBytes { bytes in
-                let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
-                                  options: ReaderOptions(traversalLimitWords: 128, nestingLimit: 8))
+                let arena = Arena(
+                    framedBytes: RawSpan(_unsafeBytes: bytes),
+                    options: ReaderOptions(traversalLimitWords: 128, nestingLimit: 8))
                 arena.withRoot { root in
                     for i in 0..<8 {
                         let pointer = root.pointerField(at: i)
@@ -312,8 +335,12 @@ struct ResolverTests {
     // in-range access; these call the raw ListReader accessors out of range directly,
     // since generated code cannot itself construct an out-of-range index.
     @Test func listIndexOutOfRangeGuards() {
-        let fixture = frame([[structWord(pointers: 1), listWord(size: 4, count: 2),
-                              UInt64(11) | UInt64(22) << 32]])
+        let fixture = frame([
+            [
+                structWord(pointers: 1), listWord(size: 4, count: 2),
+                UInt64(11) | UInt64(22) << 32,
+            ]
+        ])
         fixture.withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
             arena.withRoot { root in root.pointerField(at: 0).list(of: .fourBytes).void(at: 0) }
@@ -379,18 +406,22 @@ struct ResolverTests {
     }
 
     @Test func primitiveListWrapsListReader() {
-        frame([[structWord(pointers: 1), listWord(size: 4, count: 2),
-               UInt64(11) | UInt64(22) << 32]])
-            .withUnsafeBytes { bytes in
-                let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
-                arena.withRoot { root in
-                    let list = PrimitiveList<UInt32>(
-                        root.pointerField(at: 0).list(of: .fourBytes), zero: 0)
-                    #expect(list.count == 2)
-                    #expect(list[0] == 11)
-                    #expect(list[1] == 22)
-                }
-                #expect(arena.error == .none)
+        frame([
+            [
+                structWord(pointers: 1), listWord(size: 4, count: 2),
+                UInt64(11) | UInt64(22) << 32,
+            ]
+        ])
+        .withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                let list = PrimitiveList<UInt32>(
+                    root.pointerField(at: 0).list(of: .fourBytes), zero: 0)
+                #expect(list.count == 2)
+                #expect(list[0] == 11)
+                #expect(list[1] == 22)
             }
+            #expect(arena.error == .none)
+        }
     }
 }

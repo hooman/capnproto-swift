@@ -26,7 +26,7 @@ public struct RawPointer {
         case structure = 0
         case list = 1
         case far = 2
-        case other = 3       // capability / "other"
+        case other = 3  // capability / "other"
     }
 
     /// `true` iff the entire word is zero — the canonical null pointer (field default).

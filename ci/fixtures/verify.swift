@@ -21,8 +21,8 @@ public func verifyReaders(_ pointer: UnsafeRawPointer, _ count: Int, _ mode: Int
         }
         let value = Capnp_9eb32e19f86f3a01.ExampleReader(root.borrowed())
         precondition(value.i8 == -12 && value.i16 == -1234 && value.i32 == -123456)
-        precondition(value.i64 == -1234567890123 && value.u8 == 250 && value.u16 == 65000)
-        precondition(value.u32 == 4000000000 && value.u64 == 18000000000000000000)
+        precondition(value.i64 == -1_234_567_890_123 && value.u8 == 250 && value.u16 == 65000)
+        precondition(value.u32 == 4_000_000_000 && value.u64 == 18_000_000_000_000_000_000)
         precondition(value.f32 == 1.5 && value.f64 == -2.25)
         if mode == 0 {
             precondition(value.boolField && value.text.count == 0 && value.data.count == 0)
@@ -36,7 +36,7 @@ public func verifyReaders(_ pointer: UnsafeRawPointer, _ count: Int, _ mode: Int
         let children = value.children
         precondition(children.count == 2 && children[0].id == 11 && children[1].id == 22)
         precondition(value.bits.count == 3 && value.bits[0] && !value.bits[1] && value.bits[2])
-        precondition(value.numbers.count == 3 && value.numbers[2] == 4000000000)
+        precondition(value.numbers.count == 3 && value.numbers[2] == 4_000_000_000)
         precondition(value.texts.count == 2 && value.texts[1][0] == 98)
         precondition(value.blobs.count == 2 && value.blobs[1][0] == 2)
         precondition(value.matrix.count == 2 && value.matrix[1][1] == 22)

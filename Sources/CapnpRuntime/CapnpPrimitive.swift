@@ -22,7 +22,9 @@ public protocol CapnpPrimitive {
 
 extension CapnpPrimitive where Self: FixedWidthInteger & ConvertibleFromBytes {
     public static var sizeInBits: Int { Self.bitWidth }
-    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Self) -> Self {
+    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Self)
+        -> Self
+    {
         span.load(fromByteOffset: bit / 8, as: Self.self, .littleEndian) ^ d
     }
 }
@@ -40,7 +42,9 @@ extension Int64: CapnpPrimitive {}
 
 extension Float: CapnpPrimitive {
     public static var sizeInBits: Int { 32 }
-    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Float) -> Float {
+    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Float)
+        -> Float
+    {
         let raw = span.load(fromByteOffset: bit / 8, as: UInt32.self, .littleEndian)
         return Float(bitPattern: raw ^ d.bitPattern)
     }
@@ -48,7 +52,9 @@ extension Float: CapnpPrimitive {
 
 extension Double: CapnpPrimitive {
     public static var sizeInBits: Int { 64 }
-    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Double) -> Double {
+    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Double)
+        -> Double
+    {
         let raw = span.load(fromByteOffset: bit / 8, as: UInt64.self, .littleEndian)
         return Double(bitPattern: raw ^ d.bitPattern)
     }
@@ -58,7 +64,9 @@ extension Double: CapnpPrimitive {
 
 extension Bool: CapnpPrimitive {
     public static var sizeInBits: Int { 1 }
-    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Bool) -> Bool {
+    public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Bool)
+        -> Bool
+    {
         let byte = span.load(fromByteOffset: bit / 8, as: UInt8.self)
         let isSet = (byte >> UInt8(bit % 8)) & 1 == 1
         return isSet != d

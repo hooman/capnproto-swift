@@ -11,7 +11,9 @@ private func fail(_ error: any Error) -> Never {
 
 if CommandLine.arguments.count > 1 {
     switch CommandLine.arguments.dropFirst().joined(separator: " ") {
-    case "--version": print("capnpc-swift 0.1.0-dev"); exit(0)
+    case "--version":
+        print("capnpc-swift 0.1.0-dev")
+        exit(0)
     case "--help":
         print("Usage: capnp compile -o /path/to/capnpc-swift[:output-directory] schema.capnp")
         exit(0)
@@ -46,8 +48,9 @@ do {
         return destination
     }
     for (file, destination) in zip(files, destinations) {
-        try manager.createDirectory(at: destination.deletingLastPathComponent(),
-                                    withIntermediateDirectories: true)
+        try manager.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
         try Data(file.contents.utf8).write(to: destination, options: .atomic)
     }
 } catch {

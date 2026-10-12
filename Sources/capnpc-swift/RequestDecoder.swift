@@ -1,5 +1,5 @@
-import Foundation
 import CapnpRuntime
+import Foundation
 
 // Bootstrap the compiler through CapnpRuntime without requiring a generated schema
 // reader to build the generator itself. Offsets are transcribed from upstream
@@ -7,8 +7,9 @@ import CapnpRuntime
 // pointer offsets count slots, and discriminants describe schema unions, not wire kinds.
 enum RequestDecoder {
     static func decode(_ data: Data) throws -> SchemaRequest {
-        let arena = Arena(framedBytes: data.bytes,
-                          options: ReaderOptions(traversalLimitWords: 32 * 1024 * 1024))
+        let arena = Arena(
+            framedBytes: data.bytes,
+            options: ReaderOptions(traversalLimitWords: 32 * 1024 * 1024))
         guard arena.error == .none, arena.consumedByteCount == data.count else {
             throw CompilerFailure("expected exactly one complete unpacked CodeGeneratorRequest")
         }
@@ -64,8 +65,11 @@ enum RequestDecoder {
         let children = reader.pointerField(at: 1).list(of: .inlineComposite)
         for i in 0..<children.count {
             let child = children.structure(at: i)
-            nested.append((child.data(at: 0, default: UInt64(0)),
-                           string(child.pointerField(at: 0).text())))
+            nested.append(
+                (
+                    child.data(at: 0, default: UInt64(0)),
+                    string(child.pointerField(at: 0).text())
+                ))
         }
         var fields: [SchemaField] = []
         if kind == 1 {
@@ -92,9 +96,10 @@ enum RequestDecoder {
         let kind = reader.data(at: 4, default: UInt16(0))
         if kind == 1 {
             let id = reader.data(at: 2, default: UInt64(0))
-            return SchemaField(name: name, offset: 0, type: .structure(id),
-                               defaultExpression: "", discriminant: discriminant, groupID: id,
-                               unsupportedDefault: false)
+            return SchemaField(
+                name: name, offset: 0, type: .structure(id),
+                defaultExpression: "", discriminant: discriminant, groupID: id,
+                unsupportedDefault: false)
         }
         guard kind == 0 else { throw CompilerFailure("unknown field kind \(kind) for \(name)") }
         let type = try type(reader.pointerField(at: 2).structure(), depth: 0)
@@ -121,9 +126,10 @@ enum RequestDecoder {
             unsupportedDefault = !value.pointerField(at: 0).isNull
             expression = ""
         }
-        return SchemaField(name: name, offset: Int(reader.data(at: 1, default: UInt32(0))),
-                           type: type, defaultExpression: expression, discriminant: discriminant,
-                           groupID: nil, unsupportedDefault: unsupportedDefault)
+        return SchemaField(
+            name: name, offset: Int(reader.data(at: 1, default: UInt32(0))),
+            type: type, defaultExpression: expression, discriminant: discriminant,
+            groupID: nil, unsupportedDefault: unsupportedDefault)
     }
 
     static func type(_ reader: borrowing StructReader, depth: Int) throws -> FieldType {

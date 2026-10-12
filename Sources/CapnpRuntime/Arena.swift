@@ -51,8 +51,9 @@ public struct Arena: ~Copyable, ~Escapable {
         frame = Frame.parse(framedBytes, segmentLimit: options.segmentLimit)
         segmentID = 0
         nestingLimit = options.nestingLimit
-        state = ReadState(words: options.traversalLimitWords,
-                          error: frame.valid ? .none : .invalidFrame)
+        state = ReadState(
+            words: options.traversalLimitWords,
+            error: frame.valid ? .none : .invalidFrame)
     }
 
     /// Open a single unframed segment (for canonical messages and caller-managed framing).
@@ -93,9 +94,11 @@ public struct Arena: ~Copyable, ~Escapable {
         // SE-0519: a safe, nonescapable borrow of the shared accounting state. Every derived
         // view copies this dependency, so none can outlive the borrow of the arena.
         let context = ReadContext(bytes: bytes, state: Ref(state), frame: frame, baseID: segmentID)
-        let root = PointerReader(context: context, segmentID: segmentID,
-                                 pointerByte: frame.valid ? frame.headerBytes : -1,
-                                 nestingLimit: nestingLimit).structure()
+        let root = PointerReader(
+            context: context, segmentID: segmentID,
+            pointerByte: frame.valid ? frame.headerBytes : -1,
+            nestingLimit: nestingLimit
+        ).structure()
         return body(root)
     }
 }
