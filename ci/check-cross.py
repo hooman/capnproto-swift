@@ -17,6 +17,8 @@ p.add_argument('--stdlib', help='matching toolchain Embedded modules, for cross-
 p.add_argument('--work')
 a = p.parse_args()
 root = Path(__file__).resolve().parent.parent
+allocators = '|'.join(line.strip() for line in (root / 'ci/allocator-symbols.txt').read_text().splitlines()
+                      if line.strip() and not line.startswith('#'))
 work = Path(a.work or tempfile.mkdtemp(prefix='capnp-cross-')).resolve()
 work.mkdir(parents=True, exist_ok=True)
 flags = [a.swiftc, '-swift-version', '6', '-enable-experimental-feature', 'Embedded',
@@ -38,8 +40,7 @@ for name in ['runtime.o', 'readers.o']:
     result = subprocess.run([nm, str(work / name)], capture_output=True, text=True)
     if result.returncode:
         raise RuntimeError(f'{nm} cannot inspect {a.target}; set NM to llvm-nm: {result.stderr}')
-    assert not re.search(r'\b_?(free|malloc|posix_memalign|swift_allocObject|swift_slowAlloc|swift_coroFrameAlloc)$',
-                         result.stdout, re.M), result.stdout
+    assert not re.search(rf'\b_?({allocators})$', result.stdout, re.M), result.stdout
 negative = subprocess.run([*flags, '-c', str(root / 'ci/negative-control.swift'),
                            '-o', str(work / 'negative.o')], capture_output=True, text=True)
 assert negative.returncode != 0 and 'alloc' in negative.stderr.lower(), negative.stderr
