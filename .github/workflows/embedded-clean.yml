@@ -15,6 +15,7 @@ on:
       - 'Plugins/**'
       - 'Package.swift'
       - 'ci/**'
+      - '.swift-format'
       - '.github/workflows/embedded-clean.yml'
   pull_request:
     paths:
@@ -23,6 +24,7 @@ on:
       - 'Plugins/**'
       - 'Package.swift'
       - 'ci/**'
+      - '.swift-format'
       - '.github/workflows/embedded-clean.yml'
   schedule:
     - cron: '17 6 * * 1'   # Mondays: main-snapshot lane
@@ -91,6 +93,8 @@ jobs:
         swift: ["6.4.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Formatting (swift format against the committed .swift-format)
+        run: swift format lint --strict --parallel --recursive Package.swift Sources Tests Plugins ci
       - run: apt-get update && apt-get install -y capnproto python3
       - run: swift test
       - run: swift test -c release

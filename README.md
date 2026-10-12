@@ -152,6 +152,7 @@ Non-Apple targets have no OS availability gate.
 ## Verification
 
 ```sh
+swift format lint --strict --recursive Package.swift Sources Tests Plugins ci
 swift test
 SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-embedded-clean.sh
 python3 ci/check-readers.py --swiftc /path/to/swiftc --capnp /path/to/capnp \
@@ -165,7 +166,8 @@ select a compatible Apple SDK for older compilers. Cross-OS checks accept
 `--stdlib` pointing to the **same compiler version’s** Embedded modules from the
 target OS toolchain. CI covers host tests, C++ oracle messages, compile-time lifetime
 rejections, generated readers across a module boundary, allocator symbol audits,
-and an allocating negative control. ARMv7E-M and x86-64 Linux compile probes do not
+and an allocating negative control. Formatting follows the committed `.swift-format`
+(apply with `swift format --in-place --recursive …`; CI lints it). ARMv7E-M and x86-64 Linux compile probes do not
 substitute for execution on physical embedded hardware.
 
 ### Documentation
