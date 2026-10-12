@@ -5,9 +5,9 @@
 `Arena: ~Copyable, ~Escapable` borrows caller-owned `RawSpan` storage and owns two
 atomics: a remaining traversal-word budget and a sticky first-error code. The
 arena cannot be copied or sent across concurrency domains. `withRoot` borrows its
-state through the standard library’s `withUnsafePointer` scope and a nonescapable
-`Span<ReadState>`. No raw state pointer is stored in a reader. Every derived
-`ReadContext` retains both the message span and state span lifetime dependencies.
+state as an SE-0519 `Ref<ReadState>`, a safe nonescapable borrow; no pointer is
+formed. Every derived `ReadContext` retains both the message span and the state
+reference lifetime dependencies.
 The closure result must be escapable, so reader views cannot leave that scope.
 
 Reader views are immutable, copyable, and nonescapable. Copying a view copies
@@ -91,8 +91,9 @@ suite, not exhaustive wire-format certification or a security audit.
 Swift 6.4 is the package floor and Apple targets require OS 27: the package is a
 language-feature test bed and does not back-deploy. CI runs Swift.org 6.4.0 and a weekly
 `main` snapshot. Scalar loads use SE-0525's checked `RawSpan.load(fromByteOffset:as:_:)`;
-the runtime builds with strict memory safety, and its only `unsafe` expression is the
-one-element `Span` in `Arena.withRoot` (pending SE-0551). Experimental `Lifetimes` and
+the runtime builds with strict memory safety and contains no `unsafe` expression:
+`Arena.withRoot` lends the shared accounting state to every view as an SE-0519
+`Ref<ReadState>`, a safe, nonescapable borrow. Experimental `Lifetimes` and
 `Embedded` features are explicit build inputs.
 The no-existentials/no-Foundation policy describes this runtime, not every capability
 of newer Embedded Swift releases.

@@ -90,16 +90,12 @@ public struct Arena: ~Copyable, ~Escapable {
     public borrowing func withRoot<Result>(
         _ body: (borrowing StructReader) -> Result
     ) -> Result {
-        // The pointer exists only inside its standard-library borrowing scope. Span and
-        // all derived views are nonescapable; no pointer or reader is returned from it.
-        // Marked `unsafe` until SE-0551's single-value Span ships (absent in 6.4.0 and main).
-        withUnsafePointer(to: state) { pointer in
-            let state = unsafe Span(_unsafeStart: pointer, count: 1)
-            let context = ReadContext(bytes: bytes, state: state, frame: frame, baseID: segmentID)
-            let root = PointerReader(context: context, segmentID: segmentID,
-                                     pointerByte: frame.valid ? frame.headerBytes : -1,
-                                     nestingLimit: nestingLimit).structure()
-            return body(root)
-        }
+        // SE-0519: a safe, nonescapable borrow of the shared accounting state. Every derived
+        // view copies this dependency, so none can outlive the borrow of the arena.
+        let context = ReadContext(bytes: bytes, state: Ref(state), frame: frame, baseID: segmentID)
+        let root = PointerReader(context: context, segmentID: segmentID,
+                                 pointerByte: frame.valid ? frame.headerBytes : -1,
+                                 nestingLimit: nestingLimit).structure()
+        return body(root)
     }
 }
