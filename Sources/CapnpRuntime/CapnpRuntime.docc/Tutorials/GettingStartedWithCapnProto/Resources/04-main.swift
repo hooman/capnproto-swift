@@ -10,22 +10,20 @@ let messageBytes: [UInt8] = [
 ]
 
 func readPerson(_ bytes: [UInt8]) {
-    bytes.withUnsafeBytes { raw in
-        let arena = Arena(framedBytes: RawSpan(_unsafeBytes: raw))
-        guard arena.error == .none else {
-            print("could not even read the frame: \(arena.error)")
-            return
-        }
+    let arena = Arena(framedBytes: bytes.span.bytes)
+    guard arena.error == .none else {
+        print("could not even read the frame: \(arena.error)")
+        return
+    }
 
-        arena.withRoot { root in
-            let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
-            print("id: \(person.id)")
-        }
+    arena.withRoot { root in
+        let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
+        print("id: \(person.id)")
+    }
 
-        guard arena.error == .none else {
-            print("decode error: \(arena.error)")
-            return
-        }
+    guard arena.error == .none else {
+        print("decode error: \(arena.error)")
+        return
     }
 }
 

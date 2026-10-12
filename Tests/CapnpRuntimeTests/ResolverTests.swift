@@ -29,7 +29,6 @@ private func frame(_ segments: [[UInt64]]) -> [UInt8] {
 
 struct ResolverTests {
     @Test func framedRootAndExtremeOffsets() {
-        guard #available(macOS 15, *) else { return }
         frame([[structWord(data: 1), 42]]).withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
             arena.withRoot { root in
@@ -47,7 +46,6 @@ struct ResolverTests {
 
     @Test(arguments: [false, true])
     func farRoots(double: Bool) {
-        guard #available(macOS 15, *) else { return }
         let segments: [[UInt64]] = double
             ? [[farWord(1, double: true)], [farWord(2), structWord(data: 1)], [99]]
             : [[farWord(1)], [structWord(data: 1), 99]]
@@ -60,7 +58,6 @@ struct ResolverTests {
     }
 
     @Test func backwardPointer() {
-        guard #available(macOS 15, *) else { return }
         frame([[structWord(1, pointers: 1), 123, structWord(-2, data: 1)]])
             .withUnsafeBytes { bytes in
                 let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
@@ -76,7 +73,6 @@ struct ResolverTests {
         [0, 0, 0, 0, 255, 255, 255, 127], [1, 0, 0, 0, 0, 0, 0, 0]
     ])
     func invalidFrames(_ fixture: [UInt8]) {
-        guard #available(macOS 15, *) else { return }
         fixture.withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
             #expect(arena.error == .invalidFrame)
@@ -86,7 +82,6 @@ struct ResolverTests {
     }
 
     @Test func concatenatedFramesAndSegmentLimit() {
-        guard #available(macOS 15, *) else { return }
         let first = frame([[0]])
         (first + frame([[0]])).withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
@@ -112,7 +107,6 @@ struct ResolverTests {
         [[farWord(1)], [farWord(0)]]
     ])
     func invalidPointerRanges(_ segments: [[UInt64]]) {
-        guard #available(macOS 15, *) else { return }
         frame(segments).withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
             arena.withRoot { root in #expect(root.data(at: 0, default: UInt32(7)) == 7) }
@@ -121,7 +115,6 @@ struct ResolverTests {
     }
 
     @Test func sharedTraversalBudgetAndNesting() {
-        guard #available(macOS 15, *) else { return }
         let fixture = frame([[structWord(pointers: 1), structWord(-1, pointers: 1)]])
         fixture.withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes),
@@ -149,7 +142,6 @@ struct ResolverTests {
 
     @Test(arguments: [UInt8(0), UInt8(7)])
     func zeroSizedAmplification(_ encoding: UInt8) {
-        guard #available(macOS 15, *) else { return }
         let payload: [UInt64] = encoding == 0
             ? [listWord(size: 0, count: 100)]
             : [listWord(size: 7, count: 0), UInt64(100 << 2)]
@@ -165,7 +157,6 @@ struct ResolverTests {
 
     @Test(arguments: [UInt8(0), 1, 2, 3, 4, 5, 6, 7])
     func allListEncodings(_ size: UInt8) {
-        guard #available(macOS 15, *) else { return }
         var payload: [UInt64]
         if size == 7 {
             payload = [listWord(size: 7, count: 2), structWord(2, data: 1), 11, 22]
@@ -200,7 +191,6 @@ struct ResolverTests {
     }
 
     @Test func schemaListUpgrades() {
-        guard #available(macOS 15, *) else { return }
         frame([[structWord(pointers: 1), listWord(size: 3, count: 2), 0x00220011]])
             .withUnsafeBytes { bytes in
                 let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
@@ -231,7 +221,6 @@ struct ResolverTests {
         [listWord(-10, size: 2, count: 1)]
     ])
     func malformedLists(_ payload: [UInt64]) {
-        guard #available(macOS 15, *) else { return }
         frame([[structWord(pointers: 1)] + payload]).withUnsafeBytes { bytes in
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
             arena.withRoot { root in #expect(root.pointerField(at: 0).list(of: .inlineComposite).count == 0) }
@@ -245,7 +234,6 @@ struct ResolverTests {
         [0xe2, 0x82, 0], [0xff, 0], [0x68, 0x69], []
     ])
     func textValidation(_ text: [UInt8]) {
-        guard #available(macOS 15, *) else { return }
         var word: UInt64 = 0
         for (i, byte) in text.enumerated() { word |= UInt64(byte) << (i * 8) }
         frame([[structWord(pointers: 1), listWord(size: 2, count: UInt32(text.count)), word]])
@@ -261,7 +249,6 @@ struct ResolverTests {
             }
     }
     @Test func copiedReadersShareBudgetAndListNesting() {
-        guard #available(macOS 15, *) else { return }
         let fixture = frame([[structWord(pointers: 1), listWord(size: 7, count: 1),
                               structWord(1, data: 1), 42]])
         fixture.withUnsafeBytes { bytes in
@@ -287,7 +274,6 @@ struct ResolverTests {
     }
 
     @Test func deterministicMalformedTraversal() {
-        guard #available(macOS 15, *) else { return }
         var random: UInt64 = 0xdecafbad12345678
         func next() -> UInt64 {
             random = random &* 6364136223846793005 &+ 1442695040888963407
@@ -326,7 +312,6 @@ struct ResolverTests {
     // in-range access; these call the raw ListReader accessors out of range directly,
     // since generated code cannot itself construct an out-of-range index.
     @Test func listIndexOutOfRangeGuards() {
-        guard #available(macOS 15, *) else { return }
         let fixture = frame([[structWord(pointers: 1), listWord(size: 4, count: 2),
                               UInt64(11) | UInt64(22) << 32]])
         fixture.withUnsafeBytes { bytes in
@@ -365,7 +350,6 @@ struct ResolverTests {
     }
 
     @Test func listStructureRejectsBitEncoding() {
-        guard #available(macOS 15, *) else { return }
         // structure(at:) refuses a bit list explicitly: packed bits are not struct data/
         // pointer sections, unlike every other encoding, which structure(at:) will address
         // directly (correctly or not) without an encoding check of its own.
@@ -381,7 +365,6 @@ struct ResolverTests {
     }
 
     @Test func listPrimitiveDefaultsWhenRequestedTypeIsWiderThanStored() {
-        guard #available(macOS 15, *) else { return }
         // A direct generic data(at:default:) call for a type wider than the list's own
         // element defaults rather than reading past the element stride into the next one.
         frame([[structWord(pointers: 1), listWord(size: 4, count: 1), UInt64(42)]])
@@ -396,7 +379,6 @@ struct ResolverTests {
     }
 
     @Test func primitiveListWrapsListReader() {
-        guard #available(macOS 15, *) else { return }
         frame([[structWord(pointers: 1), listWord(size: 4, count: 2),
                UInt64(11) | UInt64(22) << 32]])
             .withUnsafeBytes { bytes in

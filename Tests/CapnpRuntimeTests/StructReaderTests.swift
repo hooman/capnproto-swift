@@ -1,8 +1,7 @@
 // Hand-built data and pointer regions isolate scalar addressing from pointer resolution.
 // Distinct adjacent values make wrong strides and data-section overruns observable.
 // ResolverTests covers framed navigation; ci/check-readers.py separately requires the
-// compiler to reject escaping reader lifetimes. Runtime availability is checked inside
-// tests because swift-testing cannot attach @Test to an @available function.
+// compiler to reject escaping reader lifetimes.
 
 import Testing
 @testable import CapnpRuntime
@@ -42,7 +41,6 @@ private func makeRegion() -> [UInt8] {
 struct StructReaderTests {
 
     @Test func dataFieldsReadWrittenValues() {
-        guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else { return }
         makeRegion().withUnsafeBytes { raw in
             let arena = Arena(bytes: RawSpan(_unsafeBytes: raw), segmentID: 0)
             let r = StructReader(
@@ -61,7 +59,6 @@ struct StructReaderTests {
     }
 
     @Test func xorDefaultUnmasking() {
-        guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else { return }
         makeRegion().withUnsafeBytes { raw in
             let arena = Arena(bytes: RawSpan(_unsafeBytes: raw), segmentID: 0)
             let r = StructReader(
@@ -74,7 +71,6 @@ struct StructReaderTests {
     }
 
     @Test func versionToleranceZeroExtension() {
-        guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else { return }
         makeRegion().withUnsafeBytes { raw in
             let arena = Arena(bytes: RawSpan(_unsafeBytes: raw), segmentID: 0)
             let r = StructReader(
@@ -88,7 +84,6 @@ struct StructReaderTests {
 
     // Moving the same field to offset zero in a subregion isolates the base-address term.
     @Test func dataStartByteShiftsAddressing() {
-        guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else { return }
         makeRegion().withUnsafeBytes { raw in
             let arena = Arena(bytes: RawSpan(_unsafeBytes: raw), segmentID: 0)
             let atEight = StructReader(
@@ -102,7 +97,6 @@ struct StructReaderTests {
     }
 
     @Test func boolBitExtraction() {
-        guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else { return }
         makeRegion().withUnsafeBytes { raw in
             let arena = Arena(bytes: RawSpan(_unsafeBytes: raw), segmentID: 0)
             let r = StructReader(
@@ -116,7 +110,6 @@ struct StructReaderTests {
     }
 
     @Test func pointerDecodeOnly() {
-        guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else { return }
         makeRegion().withUnsafeBytes { raw in
             let arena = Arena(bytes: RawSpan(_unsafeBytes: raw), segmentID: 0)
             let r = StructReader(

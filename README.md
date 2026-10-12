@@ -1,8 +1,10 @@
 # capnproto-swift
 
 Native Swift readers for [Cap’n Proto](https://capnproto.org), with a host code
-generator and an allocation-free Embedded Swift runtime. Requires Swift 6.2+;
-verified with 6.2.4 and 6.3.1. Readers-only v1 is implemented; no release is tagged yet.
+generator and an allocation-free Embedded Swift runtime. Requires Swift 6.4+
+and, on Apple platforms, OS 27. The package is a test bed for current Swift
+system-programming features and does not back-deploy. Readers-only v1 is implemented;
+no release is tagged yet.
 
 New to Cap'n Proto, or coming from Protocol Buffers? See **Why Cap'n Proto** and the
 **Getting Started** tutorial in this package's DocC documentation (`swift package
@@ -95,17 +97,14 @@ This example uses the checked-in example schema (file ID `9eb32e19f86f3a01`):
 ```swift
 import CapnpRuntime
 
-@available(macOS 15, iOS 18, watchOS 11, tvOS 18, visionOS 2, *)
 func readID(_ bytes: [UInt8]) -> UInt64? {
-    bytes.withUnsafeBytes { raw in
-        let arena = Arena(framedBytes: RawSpan(_unsafeBytes: raw))
-        guard arena.error == .none else { return nil }
-        let id = arena.withRoot { root in
-            let example = Capnp_9eb32e19f86f3a01.ExampleReader(root)
-            return example.child.id
-        }
-        return arena.error == .none ? id : nil
+    let arena = Arena(framedBytes: bytes.span.bytes)
+    guard arena.error == .none else { return nil }
+    let id = arena.withRoot { root in
+        let example = Capnp_9eb32e19f86f3a01.ExampleReader(root)
+        return example.child.id
     }
+    return arena.error == .none ? id : nil
 }
 ```
 
@@ -146,9 +145,9 @@ their schema defaults. Named union/group fields return a reader over the parent 
 
 The generator diagnoses enums, interfaces, constants, annotations, generics,
 AnyPointer, and non-empty pointer defaults. No builders, RPC, packed-stream decoder,
-public async API, or Sendable arena is provided. Apple readers require macOS 15 /
-iOS 18 / watchOS 11 / tvOS 18 / visionOS 2 because the arena uses Synchronization.
-Non-Apple readers have no OS availability gate.
+public async API, or Sendable arena is provided. Apple targets require OS 27 (macOS,
+iOS, watchOS, tvOS, visionOS), where SE-0525's safe `RawSpan` loads are available.
+Non-Apple targets have no OS availability gate.
 
 ## Verification
 
@@ -186,9 +185,9 @@ reference generated from doc comments.
 
 ### Platform evidence
 
-| Target | Verified with Swift 6.2.4 and 6.3.1 | Remaining validation |
+| Target | Verified with Swift 6.4.0 | Remaining validation |
 |---|---|---|
-| macOS host | Runtime tests, generator and C++ fixtures; Embedded object checks | Older supported Apple OS/device execution |
+| macOS host | Runtime tests, generator and C++ fixtures; Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
 | Linux x86-64 (glibc) | Host execution and Embedded object checks in CI | Additional architectures and distributions |
 | ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit and negative control | Firmware linking and device execution |
 | Static Linux SDK (musl) | Not yet verified | Separate SDK build, static link and Linux execution |

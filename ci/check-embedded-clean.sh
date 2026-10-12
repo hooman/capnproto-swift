@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SWIFTC="${SWIFTC:-$HOME/Library/Developer/Toolchains/swift-6.3.1-RELEASE.xctoolchain/usr/bin/swiftc}"
-TARGET="${TARGET:-arm64-apple-macos15}"
+TARGET="${TARGET:-arm64-apple-macos27}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRCDIR="$ROOT/Sources/CapnpRuntime"
 NEGCTL="$ROOT/ci/negative-control.swift"
@@ -23,6 +23,7 @@ FLAGS=( -swift-version 6
         -enable-experimental-feature Embedded
         -enable-experimental-feature Lifetimes
         -wmo -no-allocations
+        -strict-memory-safety -warnings-as-errors
         -target "$TARGET"
         -module-cache-path "$WORK/cache"
         -parse-as-library )

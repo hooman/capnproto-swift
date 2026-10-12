@@ -14,26 +14,24 @@ func string(from reader: CapnpRuntime.TextReader) -> String {
 }
 
 func readPerson(_ bytes: [UInt8], options: ReaderOptions = ReaderOptions()) {
-    bytes.withUnsafeBytes { raw in
-        let arena = Arena(framedBytes: RawSpan(_unsafeBytes: raw), options: options)
-        guard arena.error == .none else {
-            print("could not even read the frame: \(arena.error)")
-            return
-        }
-
-        arena.withRoot { root in
-            let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
-            print("id: \(person.id), name: \(string(from: person.name))")
-        }
-
-        // Always check the error after traversal, not before: a malformed or hostile
-        // message fails lazily, field by field, not up front at decode time.
-        guard arena.error == .none else {
-            print("decode error after traversal: \(arena.error)")
-            return
-        }
-        print("clean decode")
+    let arena = Arena(framedBytes: bytes.span.bytes, options: options)
+    guard arena.error == .none else {
+        print("could not even read the frame: \(arena.error)")
+        return
     }
+
+    arena.withRoot { root in
+        let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
+        print("id: \(person.id), name: \(string(from: person.name))")
+    }
+
+    // Always check the error after traversal, not before: a malformed or hostile
+    // message fails lazily, field by field, not up front at decode time.
+    guard arena.error == .none else {
+        print("decode error after traversal: \(arena.error)")
+        return
+    }
+    print("clean decode")
 }
 
 print("--- a message truncated mid-frame ---")

@@ -1,14 +1,18 @@
 name: embedded-clean
 
 # Install explicit Swift.org versions so host and Embedded checks use matching modules
-# independent of runner defaults. Both the development compiler and supported floor
-# run semantic, lifetime and allocation checks; scripts in ci/ own the gate logic.
+# independent of runner defaults; scripts in ci/ own the gate logic. The package floor is
+# Swift 6.4 / Apple OS 27 (a language-feature test bed, no back-deployment), so the macOS
+# job runs on the image that carries the OS 27 SDK. A weekly, non-blocking lane builds
+# against the newest `main` snapshot: it is how a new language feature or a compiler
+# regression first shows up here.
 
 on:
   push:
     paths:
       - 'Sources/**'
       - 'Tests/**'
+      - 'Plugins/**'
       - 'Package.swift'
       - 'ci/**'
       - '.github/workflows/embedded-clean.yml'
@@ -16,21 +20,34 @@ on:
     paths:
       - 'Sources/**'
       - 'Tests/**'
+      - 'Plugins/**'
       - 'Package.swift'
       - 'ci/**'
       - '.github/workflows/embedded-clean.yml'
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays: main-snapshot lane
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: embedded-clean-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  embedded-clean:
-    name: "embedded-clean (Swift ${{ matrix.swift }})"
-    runs-on: macos-15
+  macos:
+    name: "macOS (Swift ${{ matrix.swift }})"
+    if: github.event_name != 'schedule'
+    # Preview image with Xcode 27 and the macOS 27 SDK; OS-27 test binaries need it.
+    runs-on: xcode-27
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        swift: ["6.3.1", "6.2.4"]
+        swift: ["6.4.0"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: "Install Swift.org ${{ matrix.swift }} toolchain (embedded stdlib; runner Xcode lacks it)"
         run: |
@@ -40,7 +57,13 @@ jobs:
             "https://download.swift.org/swift-${V}-release/xcode/swift-${V}-RELEASE/swift-${V}-RELEASE-osx.pkg"
           installer -pkg /tmp/swift.pkg -target CurrentUserHomeDirectory
 
-      - name: "Embedded-clean gate (-no-allocations compile + nm audit + negative control)"
+      - name: Environment
+        run: |
+          sw_vers; uname -m
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+          xcrun --sdk macosx --show-sdk-version
+
+      - name: "Embedded-clean gate (-no-allocations + strict memory safety, nm audit, negative control)"
         run: |
           export SWIFTC="$HOME/Library/Developer/Toolchains/swift-${{ matrix.swift }}-RELEASE.xctoolchain/usr/bin/swiftc"
           chmod +x ci/check-embedded-clean.sh
@@ -52,20 +75,42 @@ jobs:
           export PATH="$HOME/Library/Developer/Toolchains/swift-${{ matrix.swift }}-RELEASE.xctoolchain/usr/bin:$PATH"
           brew install capnp
           swift test
+          swift test -c release
           python3 ci/check-readers.py --swiftc "$(command -v swiftc)" --plugin .build/debug/capnpc-swift --work /tmp/readers
           python3 ci/check-cross.py --swiftc "$(command -v swiftc)" --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
 
   linux:
     name: "Linux (Swift ${{ matrix.swift }})"
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     container: swift:${{ matrix.swift }}-noble
     strategy:
       fail-fast: false
       matrix:
-        swift: ["6.3.1", "6.2.4"]
+        swift: ["6.4.0"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: apt-get update && apt-get install -y capnproto python3
       - run: swift test
+      - run: swift test -c release
+      - run: SWIFTC=/usr/bin/swiftc TARGET=x86_64-unknown-linux-gnu bash ci/check-embedded-clean.sh
+      - run: SWIFTC=/usr/bin/swiftc TARGET=armv7em-none-none-eabi bash ci/check-embedded-clean.sh
       - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers
       - run: python3 ci/check-cross.py --swiftc /usr/bin/swiftc --target x86_64-unknown-linux-gnu --generated /tmp/readers/readers.capnp.swift
+      - run: python3 ci/check-cross.py --swiftc /usr/bin/swiftc --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
+
+  main-snapshot:
+    name: "Linux (Swift main snapshot, informational)"
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    container: swiftlang/swift:nightly-main-noble
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: swift --version
+      - run: apt-get update && apt-get install -y capnproto python3
+      - run: swift test
+      - run: SWIFTC="$(command -v swiftc)" TARGET=armv7em-none-none-eabi bash ci/check-embedded-clean.sh
+      - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers

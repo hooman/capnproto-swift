@@ -4,7 +4,6 @@
 // conform to Sequence, whose element requirements do not fit this v1 borrowed API.
 
 /// Indexed view of all list encodings, including primitive/struct schema upgrades.
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct ListReader: ~Escapable {
     let context: ReadContext
     let startByte: Int
@@ -76,7 +75,6 @@ public struct ListReader: ~Escapable {
 }
 
 /// By-value lists specialize at their concrete primitive element type.
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable {
     let reader: ListReader
     let zero: Element

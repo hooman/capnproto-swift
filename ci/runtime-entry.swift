@@ -2,11 +2,10 @@
 // compiler. Compiling declarations alone could leave generic bodies uninstantiated and
 // miss allocations. The object is audited by both host and cross-target gates.
 
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
-@_cdecl("capnp_embedded_probe")
+@c(capnp_embedded_probe)
 public func capnpEmbeddedProbe(_ pointer: UnsafeRawPointer, _ count: Int) -> UInt64 {
-    let bytes = UnsafeRawBufferPointer(start: pointer, count: count)
-    let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+    let bytes = unsafe UnsafeRawBufferPointer(start: pointer, count: count)
+    let arena = Arena(framedBytes: unsafe RawSpan(_unsafeBytes: bytes))
     let result = arena.withRoot { root in
         var sum = root.data(at: 0, default: (0 as UInt64))
         let child = root.pointerField(at: 0).structure()

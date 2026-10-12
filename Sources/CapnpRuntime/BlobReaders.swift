@@ -2,7 +2,6 @@
 // Text is validated once when opened; subsequent indexing returns UTF-8 code units,
 // not characters, and excludes the wire terminator.
 
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct DataReader: ~Escapable {
     let context: ReadContext
     let start: Int
@@ -17,7 +16,7 @@ public struct DataReader: ~Escapable {
 
     public subscript(index: Int) -> UInt8 {
         guard index >= 0, index < count else { context.report(.invalidIndex); return 0 }
-        return context.bytes.unsafeLoadUnaligned(fromByteOffset: start + index, as: UInt8.self)
+        return context.bytes.load(fromByteOffset: start + index, as: UInt8.self)
     }
 
     // One pass, constant storage: the lead byte determines length and the allowed
@@ -53,7 +52,6 @@ public struct DataReader: ~Escapable {
 }
 
 /// Valid UTF-8 bytes, excluding the wire NUL terminator. No allocating String conversion.
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct TextReader: ~Escapable {
     let data: DataReader
 

@@ -30,9 +30,10 @@ arithmetic conversion to an address follows range checks. Frame size is capped a
 `Int.max / 8` so bit-addressed scalar loads cannot overflow an `Int`.
 
 The small internal `widen` helpers and `_lowWord` conversions avoid a Swift 6.2/6.3
-32-bit generic-integer conversion path that instantiates allocating `Words` storage.
+32-bit generic-integer conversion path that instantiates allocating `Words` storage
+(kept on 6.4 until a probe shows the path is gone).
 The constant 64-bit pointer shift uses the masking operator for the same reason.
-Both supported compilers exercise these paths through the ARM Embedded gate.
+The ARM Embedded gate exercises these paths on every supported compiler.
 
 `StructReader` zero-extends absent fields and XORs scalar defaults. `ListReader`
 uses a bit stride and per-element data/pointer sizes for all eight wire encodings.
@@ -87,8 +88,12 @@ suite, not exhaustive wire-format certification or a security audit.
 
 ## Revisiting implementation choices
 
-Swift 6.2 remains the package floor; the release compilers exercised by CI are 6.2.4
-and 6.3.1. Experimental `Lifetimes` and `Embedded` features are explicit build inputs.
+Swift 6.4 is the package floor and Apple targets require OS 27: the package is a
+language-feature test bed and does not back-deploy. CI runs Swift.org 6.4.0 and a weekly
+`main` snapshot. Scalar loads use SE-0525's checked `RawSpan.load(fromByteOffset:as:_:)`;
+the runtime builds with strict memory safety, and its only `unsafe` expression is the
+one-element `Span` in `Arena.withRoot` (pending SE-0551). Experimental `Lifetimes` and
+`Embedded` features are explicit build inputs.
 The no-existentials/no-Foundation policy describes this runtime, not every capability
 of newer Embedded Swift releases.
 

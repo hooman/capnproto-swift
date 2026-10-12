@@ -18,29 +18,27 @@ func string(from reader: CapnpRuntime.TextReader) -> String {
 }
 
 func readPerson(_ bytes: [UInt8]) {
-    bytes.withUnsafeBytes { raw in
-        let arena = Arena(framedBytes: RawSpan(_unsafeBytes: raw))
-        guard arena.error == .none else {
-            print("could not even read the frame: \(arena.error)")
-            return
-        }
+    let arena = Arena(framedBytes: bytes.span.bytes)
+    guard arena.error == .none else {
+        print("could not even read the frame: \(arena.error)")
+        return
+    }
 
-        arena.withRoot { root in
-            let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
-            print("id: \(person.id)")
-            print("name: \(string(from: person.name))")
+    arena.withRoot { root in
+        let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
+        print("id: \(person.id)")
+        print("name: \(string(from: person.name))")
 
-            var hobbies: [String] = []
-            for i in 0..<person.hobbies.count {
-                hobbies.append(string(from: person.hobbies[i]))
-            }
-            print("hobbies: \(hobbies)")
+        var hobbies: [String] = []
+        for i in 0..<person.hobbies.count {
+            hobbies.append(string(from: person.hobbies[i]))
         }
+        print("hobbies: \(hobbies)")
+    }
 
-        guard arena.error == .none else {
-            print("decode error: \(arena.error)")
-            return
-        }
+    guard arena.error == .none else {
+        print("decode error: \(arena.error)")
+        return
     }
 }
 

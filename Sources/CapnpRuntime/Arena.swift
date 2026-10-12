@@ -5,7 +5,6 @@
 
 import Synchronization
 
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 struct ReadState: ~Copyable {
     let remaining: Atomic<UInt64>
     let failure: Atomic<UInt32>
@@ -37,7 +36,6 @@ struct ReadState: ~Copyable {
 
 /// Owns traversal state, borrowing the caller's message storage.
 /// Readers are constructed inside withRoot; neither they nor their children can escape it.
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct Arena: ~Copyable, ~Escapable {
     let bytes: RawSpan
     let state: ReadState
@@ -94,8 +92,9 @@ public struct Arena: ~Copyable, ~Escapable {
     ) -> Result {
         // The pointer exists only inside its standard-library borrowing scope. Span and
         // all derived views are nonescapable; no pointer or reader is returned from it.
+        // Marked `unsafe` until SE-0551's single-value Span ships (absent in 6.4.0 and main).
         withUnsafePointer(to: state) { pointer in
-            let state = Span(_unsafeStart: pointer, count: 1)
+            let state = unsafe Span(_unsafeStart: pointer, count: 1)
             let context = ReadContext(bytes: bytes, state: state, frame: frame, baseID: segmentID)
             let root = PointerReader(context: context, segmentID: segmentID,
                                      pointerByte: frame.valid ? frame.headerBytes : -1,

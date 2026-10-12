@@ -23,20 +23,17 @@ struct Frame {
     let byteCount: Int
     let valid: Bool
 
-    @available(macOS 10.14.4, iOS 12.2, watchOS 5.2, tvOS 12.2, visionOS 1.0, *)
     static func parse(_ bytes: RawSpan, segmentLimit: UInt32) -> Frame {
         let invalid = Frame(headerBytes: 0, segmentCount: 0, byteCount: 0, valid: false)
         guard bytes.byteCount >= 8, bytes.byteCount <= Int.max / 8 else { return invalid }
-        let count = widen(UInt32(littleEndian: bytes.unsafeLoadUnaligned(
-            fromByteOffset: 0, as: UInt32.self))) + 1
+        let count = widen(bytes.load(fromByteOffset: 0, as: UInt32.self, .littleEndian)) + 1
         guard count <= widen(segmentLimit), count <= widen(Int.max / 8) else { return invalid }
         // One count-minus-one entry plus N sizes, padded to a whole 64-bit word.
         let header = ((count + 2) / 2) * 8
         guard header <= widen(bytes.byteCount) else { return invalid }
         var total = header
         for i in 0..<Int(count._lowWord) {
-            let words = UInt32(littleEndian: bytes.unsafeLoadUnaligned(
-                fromByteOffset: 4 + i * 4, as: UInt32.self))
+            let words = bytes.load(fromByteOffset: 4 + i * 4, as: UInt32.self, .littleEndian)
             total += widen(words) * 8
             guard total <= widen(bytes.byteCount) else { return invalid }
         }
@@ -45,7 +42,6 @@ struct Frame {
     }
 }
 
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 struct ReadContext: ~Escapable {
     let bytes: RawSpan
     let state: Span<ReadState>
@@ -77,17 +73,14 @@ struct ReadContext: ~Escapable {
         guard id < frame.segmentCount else { return nil }
         var start = frame.headerBytes
         for i in 0..<Int(id) {
-            start += Int(UInt32(littleEndian: bytes.unsafeLoadUnaligned(
-                fromByteOffset: 4 + i * 4, as: UInt32.self))) * 8
+            start += Int(bytes.load(fromByteOffset: 4 + i * 4, as: UInt32.self, .littleEndian)) * 8
         }
-        let words = UInt32(littleEndian: bytes.unsafeLoadUnaligned(
-            fromByteOffset: 4 + Int(id) * 4, as: UInt32.self))
+        let words = bytes.load(fromByteOffset: 4 + Int(id) * 4, as: UInt32.self, .littleEndian)
         return Segment(start: start, words: Int(words))
     }
 
     // Caller must have validated a complete word at this absolute byte offset.
     func word(at byte: Int) -> RawPointer {
-        RawPointer(UInt64(littleEndian: bytes.unsafeLoadUnaligned(
-            fromByteOffset: byte, as: UInt64.self)))
+        RawPointer(bytes.load(fromByteOffset: byte, as: UInt64.self, .littleEndian))
     }
 }

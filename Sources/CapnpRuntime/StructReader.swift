@@ -3,7 +3,6 @@
 // getters check only the requested field against that layout and apply its default.
 
 /// A borrowed struct data/pointer view. Missing fields read their schema defaults.
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct StructReader: ~Escapable {
     let context: ReadContext
     let dataStartByte: Int
