@@ -25,14 +25,14 @@ public struct StructReader: ~Escapable {
         self.nestingLimit = nestingLimit
     }
 
-    // Trusted fixture seam: supplied regions must already be in bounds. The empty state
+    // Trusted fixture seam: supplied regions must already be in bounds. The nil state
     // disables pointer traversal and error reporting; this is not an input validation path.
     // TODO(test-fixtures): move trusted fixture construction into the test target and
     // remove this initializer from production sources.
     @_lifetime(borrow arena)
     init(arena: borrowing Arena, dataStartByte: Int, dataSizeBits: Int,
          ptrStartByte: Int, ptrCount: Int, nestingLimit: Int = Wire.nestingLimit) {
-        self.init(context: ReadContext(bytes: arena.bytes, state: Span(),
+        self.init(context: ReadContext(bytes: arena.bytes, state: nil,
                                       frame: arena.frame, baseID: arena.segmentID),
                   dataStartByte: dataStartByte, dataSizeBits: dataSizeBits,
                   ptrStartByte: ptrStartByte, ptrCount: ptrCount,

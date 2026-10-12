@@ -44,12 +44,12 @@ struct Frame {
 
 struct ReadContext: ~Escapable {
     let bytes: RawSpan
-    let state: Span<ReadState>
+    let state: Ref<ReadState>?
     let frame: Frame
     let baseID: UInt32
 
     @_lifetime(copy bytes, copy state)
-    init(bytes: RawSpan, state: Span<ReadState>, frame: Frame, baseID: UInt32) {
+    init(bytes: RawSpan, state: Ref<ReadState>?, frame: Frame, baseID: UInt32) {
         self.bytes = bytes
         self.state = state
         self.frame = frame
@@ -57,12 +57,12 @@ struct ReadContext: ~Escapable {
     }
 
     func report(_ error: ReadError) {
-        if !state.isEmpty { state[0].report(error) }
+        if let state { state.value.report(error) }
     }
 
     func charge(_ words: UInt64) -> Bool {
-        guard !state.isEmpty else { return false }
-        return state[0].charge(words)
+        guard let state else { return false }
+        return state.value.charge(words)
     }
 
     func segment(_ id: UInt32) -> Segment? {
