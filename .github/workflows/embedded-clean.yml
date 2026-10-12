@@ -123,8 +123,12 @@ jobs:
         shell: bash   # the container's default sh (dash) has no pipefail
         run: |
           set -euo pipefail
-          SDK="$(find "$HOME" -type d -path '*swift-6.4.0-RELEASE_wasm/wasm32-unknown-wasip1' | head -1)"
-          test -d "$SDK"
+          # Ask SwiftPM where it installed the SDK: in container jobs $HOME differs from the
+          # account home that SwiftPM uses.
+          ROOT_PATH="$(swift sdk configure --show-configuration swift-6.4.0-RELEASE_wasm wasm32-unknown-wasip1 \
+            | sed -n 's/^sdkRootPath: //p')"
+          SDK="$(dirname "$ROOT_PATH")"
+          test -d "$SDK/WASI.sdk"
           python3 ci/check-wasm.py --swiftc /usr/bin/swiftc --wasm-sdk "$SDK" --readers-work /tmp/readers
 
   main-snapshot:
