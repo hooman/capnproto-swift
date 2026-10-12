@@ -5,23 +5,20 @@ import CapnpRuntime
 // reader to build the generator itself. Offsets are transcribed from upstream
 // capnp/schema.capnp.h Reader accessors: data offsets use the scalar's element width,
 // pointer offsets count slots, and discriminants describe schema unions, not wire kinds.
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 enum RequestDecoder {
     static func decode(_ data: Data) throws -> SchemaRequest {
-        try data.withUnsafeBytes { raw in
-            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: raw),
-                              options: ReaderOptions(traversalLimitWords: 32 * 1024 * 1024))
-            guard arena.error == .none, arena.consumedByteCount == data.count else {
-                throw CompilerFailure("expected exactly one complete unpacked CodeGeneratorRequest")
-            }
-            // Capture throwing decode inside the borrowing scope. Check the sticky runtime
-            // error before accepting an IR: malformed reads may have yielded valid-looking defaults.
-            let result = arena.withRoot { root in Result { try request(root) } }
-            guard arena.error == .none else {
-                throw CompilerFailure("invalid CodeGeneratorRequest: \(arena.error)")
-            }
-            return try result.get()
+        let arena = Arena(framedBytes: data.bytes,
+                          options: ReaderOptions(traversalLimitWords: 32 * 1024 * 1024))
+        guard arena.error == .none, arena.consumedByteCount == data.count else {
+            throw CompilerFailure("expected exactly one complete unpacked CodeGeneratorRequest")
         }
+        // Capture throwing decode inside the borrowing scope. Check the sticky runtime
+        // error before accepting an IR: malformed reads may have yielded valid-looking defaults.
+        let result = arena.withRoot { root in Result { try request(root) } }
+        guard arena.error == .none else {
+            throw CompilerFailure("invalid CodeGeneratorRequest: \(arena.error)")
+        }
+        return try result.get()
     }
 
     static func string(_ reader: borrowing TextReader) -> String {

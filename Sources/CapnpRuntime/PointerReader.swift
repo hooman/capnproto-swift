@@ -12,7 +12,6 @@ struct ResolvedPointer {
 }
 
 /// A borrowed pointer slot. Typed accessors validate and charge each traversal.
-@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 public struct PointerReader: ~Escapable {
     let context: ReadContext
     let segmentID: UInt32
@@ -194,8 +193,7 @@ public struct PointerReader: ~Escapable {
             return TextReader(context: context)
         }
         guard list.encoding == .byte,
-              context.bytes.unsafeLoadUnaligned(fromByteOffset: list.startByte + list.count - 1,
-                                               as: UInt8.self) == 0 else {
+              context.bytes.load(fromByteOffset: list.startByte + list.count - 1, as: UInt8.self) == 0 else {
             context.report(.invalidText); return TextReader(context: context)
         }
         let data = DataReader(context: context, start: list.startByte, count: list.count - 1)

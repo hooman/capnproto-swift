@@ -53,7 +53,7 @@ host_target = run([swiftc, '-print-target-info']).decode()
 import json
 triple = json.loads(host_target)['target']['triple']
 if 'apple-macos' in triple:
-    triple = triple.split('-apple-')[0] + '-apple-macos15'
+    triple = triple.split('-apple-')[0] + '-apple-macos27'
 flags = ['-swift-version', '6', '-enable-experimental-feature', 'Lifetimes',
          '-module-cache-path', str(work / 'cache'), '-target', triple]
 if 'apple-macos' in triple:

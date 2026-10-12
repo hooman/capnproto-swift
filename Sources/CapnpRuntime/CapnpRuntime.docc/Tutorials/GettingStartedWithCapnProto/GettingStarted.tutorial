@@ -4,7 +4,7 @@
         copying it, and see how the runtime reports a malformed or oversized input
         instead of trusting it.
 
-        You'll need Swift 6.2 or later with the `Lifetimes` experimental feature, and
+        You'll need Swift 6.4 or later (and OS 27 on Apple platforms) with the `Lifetimes` experimental feature, and
         the upstream `capnp` compiler (`brew install capnp`, or your platform's
         package). Everything here targets host development; see
         <doc:WhyCapnProto> for what changes on an Embedded Swift target.

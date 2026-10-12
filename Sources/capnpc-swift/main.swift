@@ -4,7 +4,7 @@
 
 import Foundation
 
-private func fail(_ error: Error) -> Never {
+private func fail(_ error: any Error) -> Never {
     FileHandle.standardError.write(Data("capnpc-swift: \(error)\n".utf8))
     exit(1)
 }
@@ -20,9 +20,6 @@ if CommandLine.arguments.count > 1 {
 }
 
 do {
-    guard #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) else {
-        throw CompilerFailure("this host requires macOS 15 or later")
-    }
     // Bound input while streaming it in; readToEnd would allocate before enforcing the cap.
     let limit = 64 * 1024 * 1024
     var input = Data()
