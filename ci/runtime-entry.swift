@@ -14,7 +14,8 @@ public func capnpEmbeddedProbe(_ pointer: UnsafeRawPointer, _ count: Int) -> UIn
         for i in 0..<list.count {
             sum &+= list.structure(at: i).data(at: 0, default: (0 as UInt64))
         }
-        let primitives = PrimitiveList(root.pointerField(at: 2).list(of: .fourBytes), zero: UInt32(0))
+        let primitives = PrimitiveList(
+            root.pointerField(at: 2).list(of: .fourBytes), zero: UInt32(0))
         for i in 0..<primitives.count { sum &+= widen(primitives[i]) }
         let text = root.pointerField(at: 3).text()
         for i in 0..<text.count { sum &+= widen(text[i]) }

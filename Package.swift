@@ -62,7 +62,7 @@ let package = Package(
             name: "CapnpRuntimeTests",
             dependencies: ["CapnpRuntime"],
             swiftSettings: [
-                .enableExperimentalFeature("Lifetimes"),
+                .enableExperimentalFeature("Lifetimes")
             ]
         ),
     ]

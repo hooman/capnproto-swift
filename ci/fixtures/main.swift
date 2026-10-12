@@ -3,6 +3,7 @@
 // checksum keeps results observable and lets repeated runs be compared for correctness.
 
 import Foundation
+
 let mode = Int32(CommandLine.arguments[2])!
 let bytes = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
 let iterations = CommandLine.arguments.count > 3 ? Int(CommandLine.arguments[3])! : 1
@@ -14,4 +15,6 @@ bytes.withUnsafeBytes { raw in
     }
 }
 let elapsed = DispatchTime.now().uptimeNanoseconds - start
-print("PASS mode=\(mode) iterations=\(iterations) checksum=\(checksum) ns/decode=\(elapsed / UInt64(iterations))")
+print(
+    "PASS mode=\(mode) iterations=\(iterations) checksum=\(checksum) ns/decode=\(elapsed / UInt64(iterations))"
+)

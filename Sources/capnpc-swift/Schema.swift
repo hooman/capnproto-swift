@@ -14,18 +14,26 @@ enum Scalar: UInt16 {
     case void, bool, int8, int16, int32, int64, uint8, uint16, uint32, uint64, float32, float64
 
     var swift: String {
-        ["Void", "Bool", "Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16",
-         "UInt32", "UInt64", "Float", "Double"][Int(rawValue)]
+        [
+            "Void", "Bool", "Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16",
+            "UInt32", "UInt64", "Float", "Double",
+        ][Int(rawValue)]
     }
     var zero: String { self == .void ? "()" : self == .bool ? "false" : "\(swift)(0)" }
     var encoding: String {
-        ["void", "bit", "byte", "twoBytes", "fourBytes", "eightBytes", "byte",
-         "twoBytes", "fourBytes", "eightBytes", "fourBytes", "eightBytes"][Int(rawValue)]
+        [
+            "void", "bit", "byte", "twoBytes", "fourBytes", "eightBytes", "byte",
+            "twoBytes", "fourBytes", "eightBytes", "fourBytes", "eightBytes",
+        ][Int(rawValue)]
     }
 }
 
 indirect enum FieldType {
-    case scalar(Scalar), text, data, structure(UInt64), list(FieldType), unsupported(UInt16)
+    case scalar(Scalar)
+    case text, data
+    case structure(UInt64)
+    case list(FieldType)
+    case unsupported(UInt16)
     var encoding: String {
         switch self {
         case .scalar(let scalar): return scalar.encoding

@@ -38,7 +38,8 @@ struct CapnpGeneratorPlugin: BuildToolPlugin {
                 executable: capnp,
                 arguments: [
                     "compile",
-                    "-o", "\(generator.path(percentEncoded: false)):\(outputRoot.path(percentEncoded: false))",
+                    "-o",
+                    "\(generator.path(percentEncoded: false)):\(outputRoot.path(percentEncoded: false))",
                     "-I", rootPath,
                     "--src-prefix=\(rootPath)",
                     schema.path(percentEncoded: false),
@@ -59,7 +60,8 @@ struct CapnpGeneratorPlugin: BuildToolPlugin {
         let environment = ProcessInfo.processInfo.environment
         if let override = environment["CAPNP"], !override.isEmpty {
             guard Self.isExecutableRegularFile(override) else {
-                throw CapnpPluginError("CAPNP is set to \(override), which is not an executable file")
+                throw CapnpPluginError(
+                    "CAPNP is set to \(override), which is not an executable file")
             }
             return URL(fileURLWithPath: override)
         }
@@ -68,12 +70,16 @@ struct CapnpGeneratorPlugin: BuildToolPlugin {
         var candidates = (environment["PATH"] ?? "").split(separator: ":")
             .map { "\($0)/capnp" }
             .filter { $0.hasPrefix("/") }
-        candidates += ["/opt/homebrew/bin/capnp", "/usr/local/bin/capnp", "/usr/bin/capnp", "/opt/local/bin/capnp"]
+        candidates += [
+            "/opt/homebrew/bin/capnp", "/usr/local/bin/capnp", "/usr/bin/capnp",
+            "/opt/local/bin/capnp",
+        ]
         for candidate in candidates where Self.isExecutableRegularFile(candidate) {
             return URL(fileURLWithPath: candidate)
         }
         throw CapnpPluginError(
-            "cannot find the capnp compiler; install it (brew install capnp) or set CAPNP to its path")
+            "cannot find the capnp compiler; install it (brew install capnp) or set CAPNP to its path"
+        )
     }
 
     /// `FileManager.isExecutableFile(atPath:)` alone also accepts directories with the
@@ -83,7 +89,8 @@ struct CapnpGeneratorPlugin: BuildToolPlugin {
     static func isExecutableRegularFile(_ path: String) -> Bool {
         let manager = FileManager.default
         var isDirectory: ObjCBool = false
-        guard manager.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+        guard manager.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue
+        else {
             return false
         }
         return manager.isExecutableFile(atPath: path)
@@ -95,10 +102,11 @@ struct CapnpGeneratorPlugin: BuildToolPlugin {
         let rootComponents = root.pathComponents
         let components = url.pathComponents
         guard components.count > rootComponents.count,
-              Array(components.prefix(rootComponents.count)) == rootComponents else {
+            Array(components.prefix(rootComponents.count)) == rootComponents
+        else {
             throw CapnpPluginError(
                 "schema \(url.path(percentEncoded: false)) is outside the target directory "
-                + root.path(percentEncoded: false))
+                    + root.path(percentEncoded: false))
         }
         return components.dropFirst(rootComponents.count).joined(separator: "/")
     }

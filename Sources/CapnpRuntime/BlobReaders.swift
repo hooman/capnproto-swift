@@ -15,7 +15,10 @@ public struct DataReader: ~Escapable {
     }
 
     public subscript(index: Int) -> UInt8 {
-        guard index >= 0, index < count else { context.report(.invalidIndex); return 0 }
+        guard index >= 0, index < count else {
+            context.report(.invalidIndex)
+            return 0
+        }
         return context.bytes.load(fromByteOffset: start + index, as: UInt8.self)
     }
 
@@ -27,18 +30,29 @@ public struct DataReader: ~Escapable {
         var i = 0
         while i < count {
             let a = self[i]
-            if a < 0x80 { i += 1; continue }
+            if a < 0x80 {
+                i += 1
+                continue
+            }
             let n: Int
             var low: UInt8 = 0x80
             var high: UInt8 = 0xbf
             switch a {
             case 0xc2...0xdf: n = 2
-            case 0xe0: n = 3; low = 0xa0
+            case 0xe0:
+                n = 3
+                low = 0xa0
             case 0xe1...0xec, 0xee...0xef: n = 3
-            case 0xed: n = 3; high = 0x9f
-            case 0xf0: n = 4; low = 0x90
+            case 0xed:
+                n = 3
+                high = 0x9f
+            case 0xf0:
+                n = 4
+                low = 0x90
             case 0xf1...0xf3: n = 4
-            case 0xf4: n = 4; high = 0x8f
+            case 0xf4:
+                n = 4
+                high = 0x8f
             default: return false
             }
             guard n <= count - i, self[i + 1] >= low, self[i + 1] <= high else { return false }
