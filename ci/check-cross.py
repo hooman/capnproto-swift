@@ -20,7 +20,7 @@ root = Path(__file__).resolve().parent.parent
 work = Path(a.work or tempfile.mkdtemp(prefix='capnp-cross-')).resolve()
 work.mkdir(parents=True, exist_ok=True)
 flags = [a.swiftc, '-swift-version', '6', '-enable-experimental-feature', 'Embedded',
-         '-enable-experimental-feature', 'Lifetimes', '-wmo', '-no-allocations', '-strict-memory-safety',
+         '-enable-experimental-feature', 'Lifetimes', '-wmo', '-no-allocations', '-strict-memory-safety', '-warnings-as-errors',
          '-target', a.target, '-module-cache-path', str(work / 'cache'), '-parse-as-library']
 if a.stdlib:
     flags += ['-I', a.stdlib]

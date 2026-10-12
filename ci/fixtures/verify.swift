@@ -5,11 +5,10 @@
 
 import CapnpRuntime
 
-@available(macOS 15, iOS 18, watchOS 11, tvOS 18, visionOS 2, *)
-@_cdecl("verify_readers")
+@c(verify_readers)
 public func verifyReaders(_ pointer: UnsafeRawPointer, _ count: Int, _ mode: Int32) -> UInt64 {
-    let raw = UnsafeRawBufferPointer(start: pointer, count: count)
-    let arena = Arena(framedBytes: RawSpan(_unsafeBytes: raw))
+    let raw = unsafe UnsafeRawBufferPointer(start: pointer, count: count)
+    let arena = Arena(framedBytes: unsafe RawSpan(_unsafeBytes: raw))
     let sum = arena.withRoot { root -> UInt64 in
         if mode == 2 {
             let new = Capnp_9eb32e19f86f3a01.NewReader(root.borrowed())
