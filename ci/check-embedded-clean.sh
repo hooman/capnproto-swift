@@ -11,7 +11,7 @@
 # is ci/check-cross.py.
 set -euo pipefail
 
-SWIFTC="${SWIFTC:-$HOME/Library/Developer/Toolchains/swift-6.3.1-RELEASE.xctoolchain/usr/bin/swiftc}"
+SWIFTC="${SWIFTC:-$HOME/Library/Developer/Toolchains/swift-6.4.0-RELEASE.xctoolchain/usr/bin/swiftc}"
 TARGET="${TARGET:-arm64-apple-macos27}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRCDIR="$ROOT/Sources/CapnpRuntime"
@@ -56,8 +56,8 @@ echo "  PASS — compiled clean under Embedded + -no-allocations."
 
 echo
 echo "== [2/3] nm audit (secondary): assert no real allocator symbols =="
-if nm "$WORK/CapnpRuntime-embedded.o" \
-     | grep -E '(^| )_?(free|malloc|posix_memalign|swift_allocObject|swift_slowAlloc|swift_coroFrameAlloc)$'; then
+ALLOCATORS="$(grep -v '^#' "$ROOT/ci/allocator-symbols.txt" | paste -sd '|' -)"
+if nm "$WORK/CapnpRuntime-embedded.o" | grep -E "(^| )_?(${ALLOCATORS})\$"; then
   echo "  FAIL — real allocator symbols present (above)." >&2
   exit 1
 fi

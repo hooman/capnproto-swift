@@ -81,6 +81,13 @@ jobs:
           python3 ci/check-readers.py --swiftc "$(command -v swiftc)" --plugin .build/debug/capnpc-swift --work /tmp/readers
           python3 ci/check-cross.py --swiftc "$(command -v swiftc)" --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
 
+      - name: "Embedded debug info (-gline-tables-only required; -g known upstream crash) and armv7em link"
+        run: |
+          set -euo pipefail
+          export SWIFTC="$HOME/Library/Developer/Toolchains/swift-${{ matrix.swift }}-RELEASE.xctoolchain/usr/bin/swiftc"
+          TARGET=arm64-apple-macos27 bash ci/check-debug-info.sh
+          bash ci/check-link.sh
+
   linux:
     name: "Linux (Swift ${{ matrix.swift }})"
     if: github.event_name != 'schedule'
@@ -103,6 +110,26 @@ jobs:
       - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers
       - run: python3 ci/check-cross.py --swiftc /usr/bin/swiftc --target x86_64-unknown-linux-gnu --generated /tmp/readers/readers.capnp.swift
       - run: python3 ci/check-cross.py --swiftc /usr/bin/swiftc --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
+      - name: Embedded debug info (-gline-tables-only required; -g known upstream crash)
+        run: SWIFTC=/usr/bin/swiftc TARGET=armv7em-none-none-eabi bash ci/check-debug-info.sh
+      - name: armv7em firmware link against ci/firmware/stubs.c only
+        run: SWIFTC=/usr/bin/swiftc bash ci/check-link.sh
+      - name: Install the Swift.org Wasm SDK (pinned by checksum)
+        run: |
+          swift sdk install \
+            https://download.swift.org/swift-6.4.0-release/wasm-sdk/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE_wasm.artifactbundle.tar.gz \
+            --checksum f07b7be3c586d92d7a07051fc6d303b87ebea67eadc40640ba59d5a8b79aa86d
+      - name: Wasm allocation gate and oracle execution (full and Embedded; WasmKit)
+        shell: bash   # the container's default sh (dash) has no pipefail
+        run: |
+          set -euo pipefail
+          # Ask SwiftPM where it installed the SDK: in container jobs $HOME differs from the
+          # account home that SwiftPM uses.
+          ROOT_PATH="$(swift sdk configure --show-configuration swift-6.4.0-RELEASE_wasm wasm32-unknown-wasip1 \
+            | sed -n 's/^sdkRootPath: //p')"
+          SDK="$(dirname "$ROOT_PATH")"
+          test -d "$SDK/WASI.sdk"
+          python3 ci/check-wasm.py --swiftc /usr/bin/swiftc --wasm-sdk "$SDK" --readers-work /tmp/readers
 
   main-snapshot:
     name: "Linux (Swift main snapshot, informational)"
@@ -118,3 +145,5 @@ jobs:
       - run: swift test
       - run: SWIFTC="$(command -v swiftc)" TARGET=armv7em-none-none-eabi bash ci/check-embedded-clean.sh
       - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers
+      - name: Embedded debug info (reports when the upstream -g crash is fixed)
+        run: SWIFTC="$(command -v swiftc)" TARGET=armv7em-none-none-eabi bash ci/check-debug-info.sh

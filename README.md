@@ -19,8 +19,10 @@ introduction, including what changes on an Embedded Swift target.
 | Code generation — `capnpc-swift` plugin binary and the SwiftPM build-tool plugin | ✅ Implemented and verified from a separate consumer package |
 | Embedded Swift / allocation-free runtime | ✅ Verified: `-no-allocations` compile, allocator-symbol audit, and a negative control that must fail |
 | macOS and Linux (glibc) host execution | ✅ Verified in CI |
-| ARMv7E-M bare-metal compilation | 🟡 Compiles and passes the allocation-freedom checks; not yet run on physical hardware |
-| Static Linux (musl) / WebAssembly | ⬜ Not yet verified |
+| ARMv7E-M bare metal | 🟡 Compiles, passes the allocation-freedom checks and links against a minimal stub platform with no libc or allocator; not yet run on physical hardware |
+| WebAssembly / WASI | ✅ Full and Embedded Swift run the C++ oracle messages under WasmKit; Embedded allocation freedom checked by call-graph analysis |
+| Static Linux (musl) | ⬜ Not yet verified |
+| Embedded builds with full debug info (`-g`) | 🟡 Swift compiler crash (upstream); use `-gline-tables-only` — see *Embedded debug info* below |
 | Writing or mutating messages (builders) | ⬜ Not implemented — planned for v2 |
 | RPC / capabilities | ⬜ Out of scope for this project |
 | Tagged release | ⬜ None yet — depend on a commit revision (see below) |
@@ -159,6 +161,10 @@ python3 ci/check-readers.py --swiftc /path/to/swiftc --capnp /path/to/capnp \
   --plugin .build/debug/capnpc-swift --work /tmp/readers
 python3 ci/check-cross.py --swiftc /path/to/swiftc \
   --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
+SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-debug-info.sh
+SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-link.sh
+python3 ci/check-wasm.py --swiftc /path/to/swiftc --readers-work /tmp/readers \
+  --wasm-sdk /path/to/swift-6.4.0-RELEASE_wasm/wasm32-unknown-wasip1
 ```
 
 Use a Swift.org toolchain containing the Embedded standard library. `SDKROOT` can
@@ -191,13 +197,31 @@ reference generated from doc comments.
 |---|---|---|
 | macOS host | Runtime tests, generator and C++ fixtures; Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
 | Linux x86-64 (glibc) | Host execution and Embedded object checks in CI | Additional architectures and distributions |
-| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit and negative control | Firmware linking and device execution |
+| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit and negative control; firmware image links against `ci/firmware/stubs.c` only (no libc, no allocator; an allocating control fails to link) | Device execution |
 | Static Linux SDK (musl) | Not yet verified | Separate SDK build, static link and Linux execution |
-| WebAssembly / WASI | Not yet verified | Full and Embedded SDK builds, imports audit and execution |
+| WebAssembly / WASI | Full and Embedded builds run all C++ oracle messages under WasmKit (CI) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
 
 Snapshot or vendor compilers reporting a newer Swift version are not automatically
 qualified by these results. Static linking, Embedded mode and allocation freedom are
 separate properties; a Linux glibc check proves neither musl nor Wasm support.
+
+### Embedded debug info
+
+Swift 6.4.0 and current `main` crash in the compiler (`IRGenDebugInfo`, "Don't know how
+to emit debug info for type") when an Embedded build of `CapnpRuntime` uses full debug
+info (`-g`). SwiftPM passes `-g` on every build, so an Embedded package consumer needs
+line tables (or no debug info) until the compiler is fixed. SwiftPM 6.4's default build
+system ignores both overrides, so select the native build system:
+
+```sh
+swift build --build-system native -Xswiftc -gline-tables-only   # or: -debug-info-format none
+```
+
+Verified with Swift 6.4.0 for a `wasm-embedded` consumer package in release
+configuration.
+
+Host (non-Embedded) builds are unaffected. `ci/check-debug-info.sh` tracks the crash and
+reports when a toolchain fixes it.
 
 ### Known follow-up work
 

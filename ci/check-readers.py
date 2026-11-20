@@ -24,6 +24,8 @@ parser.add_argument('--iterations', type=int, default=1)
 args = parser.parse_args()
 assert args.iterations > 0
 root = Path(__file__).resolve().parent.parent
+allocators = '|'.join(line.strip() for line in (root / 'ci/allocator-symbols.txt').read_text().splitlines()
+                      if line.strip() and not line.startswith('#'))
 work = Path(args.work or tempfile.mkdtemp(prefix='capnp-readers-')).resolve()
 work.mkdir(parents=True, exist_ok=True)
 print(f'Artifacts: {work}', flush=True)
@@ -170,6 +172,6 @@ if not args.host_only:
          fixture / 'verify.swift', '-o', embedded / 'readers.o'])
     for obj in [embedded / 'runtime.o', embedded / 'readers.o']:
         symbols = run(['nm', obj]).decode()
-        assert not re.search(r'\b_?(free|malloc|posix_memalign|swift_allocObject|swift_slowAlloc|swift_coroFrameAlloc)$', symbols, re.M), symbols
+        assert not re.search(rf'\b_?({allocators})$', symbols, re.M), symbols
         print(f'PASS Embedded: {obj.name}, object bytes={obj.stat().st_size}', flush=True)
 print('READERS CONFORMANCE: PASS', flush=True)

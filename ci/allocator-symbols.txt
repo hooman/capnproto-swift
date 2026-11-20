@@ -1,0 +1,14 @@
+# Allocator symbols that must not appear in an Embedded-clean object or image. One
+# extended-regex alternation per line; scripts join the lines with '|' and match whole
+# symbol names with an optional leading '_' (Mach-O). Exact names, not "alloc": support
+# symbols such as swift_allocEmptyBox and swift_setDeallocating are harmless.
+free|malloc|calloc|realloc|aligned_alloc|posix_memalign
+swift_allocObject|swift_allocBox|swift_allocRaw|swift_slowAlloc|swift_coroFrameAlloc
+# Typed runtime entry points (swift_allocObjectTyped, swift_coroFrameAllocTyped, ...),
+# present in the 2026-09 main snapshots' Embedded runtime.
+swift_[A-Za-z]+Typed
+# Embedded Platform Abstraction Layer allocation entry points: Swift 6.4.0 spellings,
+# then main-snapshot spellings. Today's objects still call libc directly; these names
+# catch allocation once it is routed through the PAL.
+_swift_alignedAllocate|_swift_alignedFree|_swift_typedAllocate
+_swift_allocate|_swift_deallocate|_swift_typedDeallocate
