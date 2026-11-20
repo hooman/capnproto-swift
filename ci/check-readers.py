@@ -2,7 +2,8 @@
 """Use the independent C++ encoder as the wire oracle for generated Swift readers.
 Run shared fixture assertions on the host, then compile them across an Embedded module
 boundary to check specialization and allocation freedom. Negative cases cover malformed
-requests, unsupported schemas and escaping lifetimes. Retain all artifacts in --work.
+requests, unsupported schemas and (via ci/check-compile-fail.py) compile-time safety
+contracts. Retain all artifacts in --work.
 Requires Python 3, capnp and a Swift.org toolchain.
 """
 import argparse
@@ -12,6 +13,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -20,6 +22,7 @@ parser.add_argument('--capnp', default=os.environ.get('CAPNP', 'capnp'))
 parser.add_argument('--plugin', required=True)
 parser.add_argument('--work', default=None)
 parser.add_argument('--host-only', action='store_true')
+parser.add_argument('--skip-compile-fail', action='store_true')
 parser.add_argument('--iterations', type=int, default=1)
 args = parser.parse_args()
 assert args.iterations > 0
@@ -63,7 +66,8 @@ if 'apple-macos' in triple:
 sources = sorted((root / 'Sources/CapnpRuntime').glob('*.swift'))
 host = work / 'host'
 host.mkdir(exist_ok=True)
-run([swiftc, *flags, '-O', '-wmo', '-parse-as-library', '-emit-module', '-emit-object',
+run([swiftc, *flags, '-strict-memory-safety', '-warnings-as-errors',
+     '-O', '-wmo', '-parse-as-library', '-emit-module', '-emit-object',
      '-module-name', 'CapnpRuntime', '-emit-module-path', host / 'CapnpRuntime.swiftmodule',
      *sources, '-o', host / 'runtime.o'])
 # Standalone executables need the selected toolchain's compatibility libraries on
@@ -92,27 +96,17 @@ for mode, typename, message in [(0, 'Example', b'()'), (1, 'Example', full),
         path.write_bytes(data)
         print(f'segments={segments}: ' + run([host / 'verify', path, mode, args.iterations]).decode().strip(), flush=True)
 
-# Compile a legitimate borrowed view and reject escapes from both the root closure
-# and a local arena. Emit SIL: typechecking alone does not run lifetime diagnostics.
-prefix = 'import CapnpRuntime\n@available(macOS 15, iOS 18, watchOS 11, tvOS 18, visionOS 2, *)\n'
-probes = {
-    'valid': ('func valid(_ arena: borrowing Arena) -> UInt64 {\n'
-              ' arena.withRoot { root in root.pointerField(at: 0).structure().data(at: 0, default: UInt64(0)) }\n}'),
-    'root-escape': ('func bad(_ arena: borrowing Arena) -> StructReader {\n'
-                    ' arena.withRoot { root in root.borrowed() }\n}'),
-    'local-arena-escape': ('@_lifetime(copy bytes)\nfunc bad(_ bytes: RawSpan) -> StructReader {\n'
-                          ' let arena = Arena(framedBytes: bytes)\n'
-                          ' return arena.withRoot { root in root.borrowed() }\n}'),
-    'buffer-escape': ('func bad() -> Arena {\n'
-                     ' let bytes: [UInt64] = [0, 0]\n'
-                     ' return bytes.withUnsafeBytes { Arena(framedBytes: RawSpan(_unsafeBytes: $0)) }\n}')
-}
-for name, body in probes.items():
-    probe = work / f'{name}.swift'
-    probe.write_text(prefix + body + '\n')
-    command = [swiftc, *flags, '-I', host, '-parse-as-library', '-emit-sil', probe, '-o', work / f'{name}.sil']
-    run(command, reject=None if name == 'valid' else r'escap|lifetime|depend')
-print('PASS: lifetime positive control and 3 escape rejections', flush=True)
+if not args.skip_compile_fail:
+    output = run([
+        sys.executable, root / 'ci/check-compile-fail.py',
+        '--swiftc', swiftc,
+        '--mode', 'contract',
+        '--runtime-module-dir', host,
+        '--generated', generated,
+        '--work', work / 'compile-fail',
+    ]).decode().strip()
+    if output:
+        print(output, flush=True)
 
 # Compiler diagnostics must be nonzero, actionable, and leave no partial output.
 # TODO(output-tests): cover lexical and symlink output-directory escapes, and inject

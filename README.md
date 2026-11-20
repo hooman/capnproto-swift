@@ -159,6 +159,8 @@ swift test
 SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-embedded-clean.sh
 python3 ci/check-readers.py --swiftc /path/to/swiftc --capnp /path/to/capnp \
   --plugin .build/debug/capnpc-swift --work /tmp/readers
+python3 ci/check-compile-fail.py --swiftc /path/to/swiftc --mode all \
+  --generated /tmp/readers/readers.capnp.swift
 python3 ci/check-cross.py --swiftc /path/to/swiftc \
   --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
 SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-debug-info.sh
@@ -170,8 +172,9 @@ python3 ci/check-wasm.py --swiftc /path/to/swiftc --readers-work /tmp/readers \
 Use a Swift.org toolchain containing the Embedded standard library. `SDKROOT` can
 select a compatible Apple SDK for older compilers. Cross-OS checks accept
 `--stdlib` pointing to the **same compiler version’s** Embedded modules from the
-target OS toolchain. CI covers host tests, C++ oracle messages, compile-time lifetime
-rejections, generated readers across a module boundary, allocator symbol audits,
+target OS toolchain. Verification covers host tests, C++ oracle messages, compile-fail
+contracts (lifetimes, arena noncopyability, non-`Sendable`, strict memory safety) and
+watchlist tripwires, generated readers across a module boundary, allocator symbol audits,
 and an allocating negative control. Formatting follows the committed `.swift-format`
 (apply with `swift format --in-place --recursive …`; CI lints it). ARMv7E-M and x86-64 Linux compile probes do not
 substitute for execution on physical embedded hardware.

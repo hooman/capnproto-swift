@@ -78,7 +78,8 @@ jobs:
           brew install capnp
           swift test
           swift test -c release
-          python3 ci/check-readers.py --swiftc "$(command -v swiftc)" --plugin .build/debug/capnpc-swift --work /tmp/readers
+          python3 ci/check-readers.py --swiftc "$(command -v swiftc)" --plugin .build/debug/capnpc-swift --work /tmp/readers --skip-compile-fail
+          python3 ci/check-compile-fail.py --swiftc "$(command -v swiftc)" --mode contract --runtime-module-dir /tmp/readers/host --generated /tmp/readers/readers.capnp.swift --work /tmp/readers/compile-fail
           python3 ci/check-cross.py --swiftc "$(command -v swiftc)" --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
 
       - name: "Embedded debug info (-gline-tables-only required; -g known upstream crash) and armv7em link"
@@ -107,7 +108,9 @@ jobs:
       - run: swift test -c release
       - run: SWIFTC=/usr/bin/swiftc TARGET=x86_64-unknown-linux-gnu bash ci/check-embedded-clean.sh
       - run: SWIFTC=/usr/bin/swiftc TARGET=armv7em-none-none-eabi bash ci/check-embedded-clean.sh
-      - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers
+      - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers --skip-compile-fail
+      - name: Compile-fail contract suite
+        run: python3 ci/check-compile-fail.py --swiftc /usr/bin/swiftc --mode contract --runtime-module-dir /tmp/readers/host --generated /tmp/readers/readers.capnp.swift --work /tmp/readers/compile-fail
       - run: python3 ci/check-cross.py --swiftc /usr/bin/swiftc --target x86_64-unknown-linux-gnu --generated /tmp/readers/readers.capnp.swift
       - run: python3 ci/check-cross.py --swiftc /usr/bin/swiftc --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
       - name: Embedded debug info (-gline-tables-only required; -g known upstream crash)
@@ -144,6 +147,8 @@ jobs:
       - run: apt-get update && apt-get install -y capnproto python3
       - run: swift test
       - run: SWIFTC="$(command -v swiftc)" TARGET=armv7em-none-none-eabi bash ci/check-embedded-clean.sh
-      - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers
+      - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers --skip-compile-fail
+      - name: Compile-fail contract suite and watchlist tripwires
+        run: python3 ci/check-compile-fail.py --swiftc "$(command -v swiftc)" --mode all --runtime-module-dir /tmp/readers/host --generated /tmp/readers/readers.capnp.swift --work /tmp/readers/compile-fail
       - name: Embedded debug info (reports when the upstream -g crash is fixed)
         run: SWIFTC="$(command -v swiftc)" TARGET=armv7em-none-none-eabi bash ci/check-debug-info.sh
