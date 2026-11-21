@@ -130,10 +130,20 @@ for name, flags in variants.items():
     for runner, command in runners:
         for message in messages:
             mode = int(message.name.split('-')[1])
-            data = bytes([mode]) + bytes(7) + message.read_bytes()
+            data = bytes([mode, 0]) + bytes(6) + message.read_bytes()
             output = run([*command, wasm], data=data)
             got = re.search(r'checksum=(\d+)', output)
             assert got and got.group(1) == expected[message], f'{name}/{runner}/{message.name}: {output!r}'
-        print(f'PASS wasm {name} under {runner}: {len(messages)} messages match the host checksums '
-              f'({wasm.stat().st_size} bytes)', flush=True)
+        # Unaligned (+1 and +3 byte shifted) execution of a populated multi-segment oracle message.
+        populated = [m for m in messages if m.name.startswith('message-1-')][0]
+        for shift in (1, 3):
+            data = bytes([1, shift]) + bytes(6 + shift) + populated.read_bytes()
+            output = run([*command, wasm], data=data)
+            got = re.search(r'checksum=(\d+)', output)
+            assert got and got.group(1) == expected[populated], f'{name}/{runner}/shift={shift}: {output!r}'
+        # 32-bit overflow, Atomic<UInt> clamping, amplification, unaligned UTF-8, and malformed suite.
+        edge_out = run([*command, wasm], data=bytes([99, 0]) + bytes(6))
+        assert re.search(r'PASS mode=99 checks=8\b', edge_out), f'{name}/{runner}/mode=99: {edge_out!r}'
+        print(f'PASS wasm {name} under {runner}: {len(messages)} aligned + 2 unaligned oracle messages + '
+              f'8 32-bit edge checks ({wasm.stat().st_size} bytes)', flush=True)
 print('WASM CHECK: PASS', flush=True)
