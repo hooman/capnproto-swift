@@ -564,18 +564,18 @@ struct ResolverTests {
             [
                 structWord(data: 1, pointers: 5),
                 rootData,
-                listWord(4, size: 7, count: 1),   // slot 2 -> word 7
-                listWord(5, size: 6, count: 1),   // slot 3 -> word 9
-                listWord(6, size: 6, count: 1),   // slot 4 -> word 11
-                listWord(8, size: 6, count: 1),   // slot 5 -> word 14
-                listWord(8, size: 6, count: 1),   // slot 6 -> word 15
-                structWord(1, data: 1), 42,       // words 7..8
+                listWord(4, size: 7, count: 1),  // slot 2 -> word 7
+                listWord(5, size: 6, count: 1),  // slot 3 -> word 9
+                listWord(6, size: 6, count: 1),  // slot 4 -> word 11
+                listWord(8, size: 6, count: 1),  // slot 5 -> word 14
+                listWord(8, size: 6, count: 1),  // slot 6 -> word 15
+                structWord(1, data: 1), 42,  // words 7..8
                 listWord(0, size: 2, count: 2), dataWord,  // words 9..10
-                listWord(0, size: 6, count: 1),   // word 11 -> word 12
-                listWord(0, size: 2, count: 3),   // word 12 -> word 13
-                hiWord,                           // word 13
-                listWord(0, size: 0, count: 2),   // word 14 (void list)
-                listWord(0, size: 4, count: 2), u32Pair,   // words 15..16
+                listWord(0, size: 6, count: 1),  // word 11 -> word 12
+                listWord(0, size: 2, count: 3),  // word 12 -> word 13
+                hiWord,  // word 13
+                listWord(0, size: 0, count: 2),  // word 14 (void list)
+                listWord(0, size: 4, count: 2), u32Pair,  // words 15..16
             ]
         ])
         .withUnsafeBytes { bytes in
@@ -634,10 +634,13 @@ struct ResolverTests {
                 let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
                 #expect(arena.charge(words: 5) == true)
                 arena.withRoot { root in
-                    #expect(root.pointerField(at: 0).structure(default: RawPointer(0)).pointer(at: 0).isNull)
+                    #expect(
+                        root.pointerField(at: 0).structure(default: RawPointer(0)).pointer(at: 0)
+                            .isNull)
                     // Capability pointer is non-null on wire, but dereferences cleanly as empty.
                     #expect(root.pointerField(at: 2).isNull == false)
-                    #expect(root.pointerField(at: 2).structure().data(at: 0, default: UInt64(5)) == 5)
+                    #expect(
+                        root.pointerField(at: 2).structure().data(at: 0, default: UInt64(5)) == 5)
                 }
                 #expect(arena.error == .none)
 

@@ -102,16 +102,17 @@
 
     @Section(title: "Read text and lists") {
         @ContentAndMedia {
-            Text and list fields work the same way scalars do: `TextReader` exposes
-            validated UTF-8 bytes without copying them, and a list reader gives you
-            `count` plus indexed access. Copy a value out only once you actually need
-            it to outlive the decode scope.
+            Text and list fields work the same way scalars do: `TextReader` exposes a
+            validated `utf8: UTF8Span` without copying it, and a list reader gives you
+            `count` plus indexed access. Copy into an owned `String` with
+            `String(copying: text.utf8)` only when you need the value to outlive the
+            decode scope.
         }
 
         @Steps {
             @Step {
-                Add a small helper to copy a `TextReader` into a `String`, and read
-                `name` and the `hobbies` list the same way you read `id`.
+                Read `name` and the `hobbies` list using `String(copying: _.utf8)`
+                alongside `id`.
 
                 @Code(name: "main.swift", file: "05-main.swift")
             }

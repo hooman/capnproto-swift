@@ -34,10 +34,18 @@ and what's deliberately out of scope.
 
 - ``StructReader``
 - ``ListReader``
+- ``CapnpList``
 - ``PrimitiveList``
+- ``VoidList``
 - ``PointerReader``
 - ``TextReader``
 - ``DataReader``
+
+### Protocols and codegen conformances
+
+- ``CapnpStructReader``
+- ``CapnpListElement``
+- ``CapnpPrimitive``
 
 ### Limits and errors
 
@@ -48,3 +56,4 @@ and what's deliberately out of scope.
 ### Wire format
 
 - ``RawPointer``
+- ``Wire``

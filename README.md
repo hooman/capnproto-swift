@@ -17,12 +17,12 @@ introduction, including what changes on an Embedded Swift target.
 |---|---|
 | Reading messages — structs, lists, unions, groups, text/data, schema evolution | ✅ Implemented, conformance-tested against the C++ reference implementation |
 | Code generation — `capnpc-swift` plugin binary and the SwiftPM build-tool plugin | ✅ Implemented and verified from a separate consumer package |
-| Embedded Swift / allocation-free runtime | ✅ Verified: `-no-allocations` compile, allocator-symbol audit, and a negative control that must fail |
-| macOS and Linux (glibc) host execution | ✅ Verified in CI |
-| ARMv7E-M bare metal | 🟡 Compiles, passes the allocation-freedom checks and links against a minimal stub platform with no libc or allocator; not yet run on physical hardware |
-| WebAssembly / WASI | ✅ Full and Embedded Swift run the C++ oracle messages under WasmKit; Embedded allocation freedom checked by call-graph analysis |
+| Embedded Swift / allocation-free runtime | ✅ Verified: `-no-allocations` compile, allocator-symbol audit, negative control, and 0 `unsafe` expressions under strict memory safety |
+| macOS and Linux (glibc) host execution | ✅ Verified in CI (31 runtime tests at 98.7% line coverage, C++ oracle conformance, 25 compile-fail fixtures, output-boundary hardening) |
+| ARMv7E-M bare metal | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`5,502 B` flash / `10,992 B` ELF on 6.4.2; `5,043 B` flash / `9,912 B` ELF on `main-2026-11-01`); not yet run on physical hardware |
+| WebAssembly / WASI | ✅ Full and Embedded (`106,708 B`) Swift run the C++ oracle messages under WasmKit; Embedded allocation freedom checked by call-graph analysis |
 | Static Linux (musl) | 🟡 Verified locally on Swift 6.4.2 (`aarch64` native Linux `FROM scratch`, `x86_64` Rosetta-emulated `FROM scratch`); static ELF audit + 9/9 oracle messages pass; native `x86_64` Linux hardware pending |
-| Embedded builds with full debug info (`-g`) | 🟡 Swift compiler crash (upstream); use `-gline-tables-only` — see *Embedded debug info* below |
+| Embedded builds with full debug info (`-g`) | 🟡 Fixed on Swift `main` (`main-snapshot-2026-11-01`); Swift 6.4.0–6.4.2 releases still need `-gline-tables-only` — see *Embedded debug info* below |
 | Writing or mutating messages (builders) | ⬜ Not implemented — planned for v2 |
 | RPC / capabilities | ⬜ Out of scope for this project |
 | Tagged release | ⬜ None yet — depend on a commit revision (see below) |
@@ -112,10 +112,10 @@ func readID(_ bytes: [UInt8]) -> UInt64? {
 
 The runtime borrows storage; it does not allocate, copy the message, or own a
 buffer. Keep reads inside `withRoot`. A reader, list, text, or data view cannot
-escape that scope. Primitive results and caller-created owned results can return.
-Raw pointers enter through Swift’s explicitly unsafe `RawSpan` constructor; the
-caller must supply valid storage for that scope. The example borrows an array’s
-storage through `withUnsafeBytes`.
+escape that scope, and neither `Arena` nor any view is `Sendable` (`~Sendable`).
+Primitive results and caller-created owned results can return. The example above
+borrows the array's storage safely through `bytes.span.bytes`; raw pointers from C
+can enter through Swift's explicitly unsafe `RawSpan(_unsafeBytes:)` constructor.
 
 `arena.error` records the first failure. Missing fields and null pointers read
 schema defaults without an error. Malformed pointers, invalid UTF-8/text terminators,
@@ -130,10 +130,14 @@ the shared budget. Lists of zero-sized elements consume virtual words to prevent
 amplification. `consumedByteCount` identifies the first frame when bytes contain
 concatenated messages. Packed streams must be unpacked before calling the runtime.
 
-Lists expose `count` and indexed access: `for i in 0..<list.count`. Text exposes
-validated UTF-8 bytes without its wire NUL; data exposes uninterpreted bytes.
-Unions expose `_capnpWhich` (nil for unknown future tags); inactive fields return
-their schema defaults. Named union/group fields return a reader over the parent layout.
+Lists expose `count` and indexed access (`for i in 0..<list.count`) through
+`PrimitiveList<Element>`, `VoidList`, and unified generic `CapnpList<Element>`.
+`TextReader` validates UTF-8 once on open and exposes `utf8: UTF8Span` (use
+`String(copying: text.utf8)` when an owned `String` is needed), `bytes: Span<UInt8>`,
+and `Iterable` borrowing iteration without the wire NUL. `DataReader` exposes
+`bytes: Span<UInt8>` and `Iterable` over uninterpreted bytes. Unions expose
+`_capnpWhich` (nil for unknown future tags); inactive fields return their schema
+defaults. Named union/group fields return a reader over the parent layout.
 
 ## Supported scope
 
@@ -198,13 +202,13 @@ reference generated from doc comments.
 
 ### Platform evidence
 
-| Target | Verified with Swift 6.4.0 | Remaining validation |
+| Target | Verified with Swift 6.4.0 / 6.4.2 (and `main-2026-11-01` locally) | Remaining validation |
 |---|---|---|
-| macOS host | Runtime tests, generator and C++ fixtures; Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
-| Linux x86-64 (glibc) | Host execution and Embedded object checks in CI | Additional architectures and distributions |
-| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit and negative control; firmware image links against `ci/firmware/stubs.c` only (no libc, no allocator; an allocating control fails to link) | Device execution |
+| macOS host | 31 runtime tests (98.7% line coverage), generator + output-boundary hardening, C++ fixtures, 25 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
+| Linux x86-64 (glibc) | Host execution, strict `swift format` lint, and Embedded object checks in CI | Additional architectures and distributions |
+| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`5,502 B` flash / `10,992 B` ELF on 6.4.2; `5,043 B` flash / `9,912 B` ELF on `main-2026-11-01` with PAL `_swift_deallocate` negative-control rejection) | Device or QEMU execution |
 | Static Linux SDK (musl) | Verified locally with Swift 6.4.2 (`swift-6.4.2-RELEASE_static-linux-0.1.0`, musl 1.2.5): `aarch64` and `x86_64` statically linked ELF executables (`INTERP`/`DYNAMIC`/`NEEDED` absent) run all 9 C++ oracle messages + wrong-mode negative control in `FROM scratch` Linux containers (`aarch64` native arm64 Linux, `x86_64` Rosetta-emulated on Apple Silicon); SwiftPM `--swift-sdk` builds `CapnpRuntime` cleanly (SDK ships no `Testing` module). Full-Swift static binaries allocate; this is separate from `-no-allocations` | Native `x86_64` Linux hardware execution |
-| WebAssembly / WASI | Full and Embedded builds run all C++ oracle messages under WasmKit (CI) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
+| WebAssembly / WASI | Full and Embedded (`106,708 B`) builds run all C++ oracle messages under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
 
 Snapshot or vendor compilers reporting a newer Swift version are not automatically
 qualified by these results. Static linking, Embedded mode and allocation freedom are
@@ -212,11 +216,12 @@ separate properties; a Linux glibc check proves neither musl nor Wasm support.
 
 ### Embedded debug info
 
-Swift 6.4.0 and current `main` crash in the compiler (`IRGenDebugInfo`, "Don't know how
+Swift 6.4.0–6.4.2 releases crash in the compiler (`IRGenDebugInfo`, "Don't know how
 to emit debug info for type") when an Embedded build of `CapnpRuntime` uses full debug
-info (`-g`). SwiftPM passes `-g` on every build, so an Embedded package consumer needs
-line tables (or no debug info) until the compiler is fixed. SwiftPM 6.4's default build
-system ignores both overrides, so select the native build system:
+info (`-g`). This crash is fixed on Swift `main` (verified on `main-snapshot-2026-11-01`).
+Until the fix ships in a release, SwiftPM passes `-g` on every build, so an Embedded
+package consumer on 6.4.x needs line tables (or no debug info). SwiftPM 6.4's default
+build system ignores both overrides, so select the native build system:
 
 ```sh
 swift build --build-system native -Xswiftc -gline-tables-only   # or: -debug-info-format none
@@ -230,11 +235,9 @@ reports when a toolchain fixes it.
 
 ### Known follow-up work
 
-Schema `sourceInfo` documentation is not yet propagated into generated Swift comments.
-Filesystem rejection tests do not yet cover path/symlink escapes or injected partial-write
-failures. These gaps are marked at the relevant decoder and verification code. The
-internal trusted scalar-fixture initializer is also marked for relocation into tests.
-Unsupported v1 features listed above are deliberate scope limits, not silent stubs.
+Schema `sourceInfo` documentation is not yet propagated into generated Swift comments
+(`TODO(codegen-docs)` in `RequestDecoder.swift`). Unsupported v1 features listed above
+are deliberate scope limits, not silent stubs.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the storage, lifetime, and validation model.
 Licensed under [MIT](LICENSE).

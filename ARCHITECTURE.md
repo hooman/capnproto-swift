@@ -2,20 +2,21 @@
 
 ## Storage and lifetimes
 
-`Arena: ~Copyable, ~Escapable` borrows caller-owned `RawSpan` storage and owns two
-atomics: a remaining traversal-word budget and a sticky first-error code. The
+`Arena: ~Copyable, ~Escapable, ~Sendable` borrows caller-owned `RawSpan` storage and
+owns two atomics: a remaining traversal-word budget and a sticky first-error code. The
 arena cannot be copied or sent across concurrency domains. `withRoot` borrows its
-state as an SE-0519 `Ref<ReadState>`, a safe nonescapable borrow; no pointer is
-formed. Every derived `ReadContext` retains both the message span and the state
+state as a non-optional SE-0519 `Ref<ReadState>`, a safe nonescapable borrow; no pointer
+is formed. Every derived `ReadContext` retains both the message span and the state
 reference lifetime dependencies.
 The closure result must be escapable, so reader views cannot leave that scope.
 
-Reader views are immutable, copyable, and nonescapable. Copying a view copies
-positions and lifetime dependencies, not the message or limiter. This is deliberate:
-The verified Swift 6.3.1 build synthesizes coroutine accessors with allocator references when computed
-properties return noncopyable views. Copyable views compile without those allocator
-references and keep the compiler-enforced lifetime proof. Arena ownership remains
-unique. Lifetime-positive and escape-negative compiler fixtures guard this boundary.
+Reader views are immutable, copyable, nonescapable, and explicitly `~Sendable` (SE-0518).
+Copying a view copies positions and lifetime dependencies, not the message or limiter.
+This is deliberate: computed properties and borrow accessors on noncopyable views still
+synthesize coroutine allocator calls on verified Swift 6.4.x and `main` toolchains.
+Copyable views compile without those allocator references and keep the compiler-enforced
+lifetime proof. Arena ownership remains unique. The 25-fixture `ci/check-compile-fail.py`
+suite guards lifetime, noncopyability, non-`Sendable`, and strict memory safety contracts.
 
 ## Wire access
 
@@ -37,9 +38,14 @@ The ARM Embedded gate exercises these paths on every supported compiler.
 
 `StructReader` zero-extends absent fields and XORs scalar defaults. `ListReader`
 uses a bit stride and per-element data/pointer sizes for all eight wire encodings.
-Primitive-list views and generated concrete view-list wrappers provide indexed
-access. Lists can be viewed through compatible older/newer struct layouts without
-copying. Text requires a byte-list encoding, NUL termination, and valid UTF-8.
+`PrimitiveList<Element>`, `VoidList`, and unified generic `CapnpList<Element: CapnpListElement & ~Escapable>`
+(with generated struct readers conforming to `CapnpStructReader`) provide indexed access
+without per-field generated list wrapper structs, specializing cleanly across Embedded
+module boundaries. Lists can be viewed through compatible older/newer struct layouts
+without copying. `DataReader` exposes `bytes: Span<UInt8>` via an SE-0507 `borrow`
+accessor and conforms to SE-0516 `Iterable`. `TextReader` requires a byte-list encoding,
+NUL termination, and valid UTF-8 checked once through `UTF8Span(validating:)`, exposing
+`utf8: UTF8Span` (`borrow`), `bytes: Span<UInt8>`, and `Iterable`.
 
 ## Limits and failure semantics
 
@@ -63,40 +69,50 @@ unpacked `CodeGeneratorRequest` through the runtime. Bootstrap offsets are
 transcribed from upstream `schema.capnp.h`. It builds an owned schema model,
 validates the supported subset, renders all files, then writes output. Unsupported
 features produce a nonzero exit with a `capnpc-swift:` diagnostic. Output filenames
-must be relative; normalized/symlink-resolved destinations must stay under the
-compiler output directory. Rendering validates all requested files before writes;
-filesystem errors during a multi-file write can still leave earlier files updated.
+must be relative with no empty, `.`, `..`, or control-character components; preflight
+walks existing parent components via `lstat` so symlinked directories are resolved even
+when the leaf file does not yet exist, and rejects escaping symlinks, symlink leaves,
+and directory collisions. Rendering validates all requested files before writes; writes
+are atomic per file and newly created files are rolled back on a mid-run write failure.
 Path validation assumes the output directory is not concurrently mutated; it is not a
 race-resistant filesystem sandbox. Schema source documentation is not yet emitted.
 
-File IDs namespace generated readers. Unions use a raw discriminant enum without
-borrowed associated values; group readers share the parent struct layout. The
-same generated code imports the runtime on host and Embedded builds. There is no
-Foundation, reflection, existential dispatch, or mutable message storage in the
-runtime or generated output.
+File IDs namespace generated readers, which emit `public import CapnpRuntime` so
+consumers enabling `InternalImportsByDefault` can expose generated types directly. Unions
+use a raw discriminant enum without borrowed associated values; group readers share the
+parent struct layout. The same generated code imports the runtime on host and Embedded
+builds. There is no Foundation, reflection, existential dispatch, or mutable message
+storage in the runtime or generated output.
 
 ## Validation boundaries
 
-Host tests cover scalar decoding, framing, far pointers, all list encodings,
-UTF-8, malformed ranges, shared budgets, nesting, and deterministic malformed
-traversal. `ci/check-readers.py` uses the upstream C++ compiler for end-to-end
-fixtures and compiles generated readers against a separately compiled runtime.
-`ci/check-cross.py` also roots that generated path in an exported C function.
-The Embedded gate requires `-no-allocations` compilation, absence of allocator
-symbols, and rejection of an allocating negative control. These tests are a bounded
-suite, not exhaustive wire-format certification or a security audit.
+Host tests (31 tests, 98.7% `CapnpRuntime` line coverage) cover scalar decoding, framing,
+far pointers, all list encodings, nested generic lists, UTF-8/Span/Iterable blob views,
+malformed ranges, shared budgets, nesting, and single- and multi-segment deterministic
+malformed traversal. `ci/check-readers.py` uses the upstream C++ compiler for end-to-end
+fixtures, runs output-boundary hardening tests (lexical/symlink escapes, collisions, and
+read-only rollback), delegates the 25-fixture `ci/check-compile-fail.py` suite, and
+compiles generated readers against a separately compiled Embedded runtime.
+`ci/check-cross.py` roots that generated path in an exported C function, `ci/check-link.sh`
+links a bare-metal ARMv7E-M firmware image against `stubs.c` only and reports both ELF
+and loadable flash size, `ci/check-wasm.py` executes full and Embedded Wasm/WASI builds
+under WasmKit, and `ci/check-static-linux.py` verifies `aarch64`/`x86_64` musl static
+ELF binaries in `FROM scratch` Linux containers. The Embedded gate requires
+`-no-allocations` compilation, absence of allocator symbols, and rejection of an
+allocating negative control. These tests are a bounded suite, not exhaustive wire-format
+certification or a security audit.
 
 ## Revisiting implementation choices
 
 Swift 6.4 is the package floor and Apple targets require OS 27: the package is a
 language-feature test bed and does not back-deploy. CI runs Swift.org 6.4.0 and a weekly
-`main` snapshot. Scalar loads use SE-0525's checked `RawSpan.load(fromByteOffset:as:_:)`;
-the runtime builds with strict memory safety and contains no `unsafe` expression:
-`Arena.withRoot` lends the shared accounting state to every view as an SE-0519
-`Ref<ReadState>`, a safe, nonescapable borrow. Experimental `Lifetimes` and
-`Embedded` features are explicit build inputs.
-The no-existentials/no-Foundation policy describes this runtime, not every capability
-of newer Embedded Swift releases.
+`main` snapshot (with local qualification on 6.4.2-RELEASE and `main-snapshot-2026-11-01`).
+Scalar loads use SE-0525's checked `RawSpan.load(fromByteOffset:as:_:)`; the runtime
+builds with strict memory safety and contains zero `unsafe` expressions: `Arena.withRoot`
+lends the shared accounting state to every view as a non-optional SE-0519 `Ref<ReadState>`,
+a safe, nonescapable borrow. Experimental `Lifetimes` and `Embedded` features are explicit
+build inputs. The no-existentials/no-Foundation policy describes this runtime, not every
+capability of newer Embedded Swift releases.
 
 Revisit a workaround with a concrete replacement: preserve error/default behavior,
 run the generated cross-module and lifetime tests, compile with -no-allocations, and

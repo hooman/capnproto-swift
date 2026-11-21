@@ -7,12 +7,6 @@ let messageBytes: [UInt8] = [
     110, 101, 115, 0,
 ]
 
-func string(from reader: CapnpRuntime.TextReader) -> String {
-    var scalars = String.UnicodeScalarView()
-    for i in 0..<reader.count { scalars.append(UnicodeScalar(reader[i])) }
-    return String(scalars)
-}
-
 func readPerson(_ bytes: [UInt8], options: ReaderOptions = ReaderOptions()) {
     let arena = Arena(framedBytes: bytes.span.bytes, options: options)
     guard arena.error == .none else {
@@ -22,7 +16,7 @@ func readPerson(_ bytes: [UInt8], options: ReaderOptions = ReaderOptions()) {
 
     arena.withRoot { root in
         let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
-        print("id: \(person.id), name: \(string(from: person.name))")
+        print("id: \(person.id), name: \(String(copying: person.name.utf8))")
     }
 
     // Always check the error after traversal, not before: a malformed or hostile

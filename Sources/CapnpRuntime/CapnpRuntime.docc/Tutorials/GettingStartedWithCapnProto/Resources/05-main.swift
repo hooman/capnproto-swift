@@ -9,14 +9,6 @@ let messageBytes: [UInt8] = [
     110, 101, 115, 0,
 ]
 
-// TextReader exposes validated UTF-8 bytes, not a String — copy them only if you
-// need to keep the value past the decode scope.
-func string(from reader: CapnpRuntime.TextReader) -> String {
-    var scalars = String.UnicodeScalarView()
-    for i in 0..<reader.count { scalars.append(UnicodeScalar(reader[i])) }
-    return String(scalars)
-}
-
 func readPerson(_ bytes: [UInt8]) {
     let arena = Arena(framedBytes: bytes.span.bytes)
     guard arena.error == .none else {
@@ -27,11 +19,13 @@ func readPerson(_ bytes: [UInt8]) {
     arena.withRoot { root in
         let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
         print("id: \(person.id)")
-        print("name: \(string(from: person.name))")
+        // TextReader.utf8 is a validated UTF8Span — copy into a String only when
+        // you need an owned value outside the decode scope.
+        print("name: \(String(copying: person.name.utf8))")
 
         var hobbies: [String] = []
         for i in 0..<person.hobbies.count {
-            hobbies.append(string(from: person.hobbies[i]))
+            hobbies.append(String(copying: person.hobbies[i].utf8))
         }
         print("hobbies: \(hobbies)")
     }
