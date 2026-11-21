@@ -24,6 +24,8 @@ work.mkdir(parents=True, exist_ok=True)
 flags = [a.swiftc, '-swift-version', '6', '-enable-experimental-feature', 'Embedded',
          '-enable-experimental-feature', 'Lifetimes', '-wmo', '-no-allocations', '-strict-memory-safety', '-warnings-as-errors',
          '-target', a.target, '-module-cache-path', str(work / 'cache'), '-parse-as-library']
+if a.target.startswith('riscv32'):
+    flags += ['-Xcc', '-march=rv32imac', '-Xcc', '-mabi=ilp32']
 if a.stdlib:
     flags += ['-I', a.stdlib]
 sources = sorted((root / 'Sources/CapnpRuntime').glob('*.swift'))
@@ -33,9 +35,10 @@ subprocess.run([*flags, '-c', *map(str, sources), str(root / 'ci/runtime-entry.s
                 '-o', str(work / 'runtime.o')], check=True)
 subprocess.run([*flags, '-I', str(work), '-c', str(Path(a.generated).resolve()),
                 str(root / 'ci/fixtures/verify.swift'), '-o', str(work / 'readers.o')], check=True)
-# Apple nm cannot read every ELF object; llvm-nm is accepted through NM.
+# Apple nm cannot read every ELF object (e.g. riscv32); prefer toolchain llvm-nm if present.
 import os
-nm = os.environ.get('NM', 'nm')
+sibling_llvm_nm = Path(a.swiftc).resolve().parent / 'llvm-nm'
+nm = os.environ.get('NM') or (str(sibling_llvm_nm) if sibling_llvm_nm.is_file() else 'nm')
 for name in ['runtime.o', 'readers.o']:
     result = subprocess.run([nm, str(work / name)], capture_output=True, text=True)
     if result.returncode:

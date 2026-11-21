@@ -32,10 +32,20 @@ FLAGS=( -swift-version 6
         -Xfrontend -function-sections
         -target "$TARGET"
         -module-cache-path "$WORK/cache" )
+CLANG_FLAGS=( -target "$TARGET" -ffreestanding -Os )
+case "$TARGET" in
+    armv7em-*)
+        CLANG_FLAGS+=( -mthumb -mfloat-abi=soft )
+        ;;
+    riscv32-*)
+        CLANG_FLAGS+=( -march=rv32imac -mabi=ilp32 )
+        FLAGS+=( -Xcc -march=rv32imac -Xcc -mabi=ilp32 )
+        ;;
+esac
 
 echo "swiftc: $SWIFTC"
 echo "target: $TARGET"
-"$CLANG" -target "$TARGET" -mthumb -mfloat-abi=soft -ffreestanding -Os \
+"$CLANG" "${CLANG_FLAGS[@]}" \
     -c "$ROOT/ci/firmware/stubs.c" -o "$WORK/stubs.o"
 
 "$SWIFTC" "${FLAGS[@]}" -no-allocations -module-name firmware -c "${SRCS[@]}" \
@@ -48,8 +58,8 @@ for line in sys.stdin:
     m = re.match(r"\s*\d+\s+(\.\S+)\s+([0-9a-fA-F]+)\s+", line)
     if m:
         secs[m.group(1)] = int(m.group(2), 16)
-flash = sum(secs.get(s, 0) for s in (".text", ".rodata", ".ARM.exidx", ".data", ".got"))
-txt, ro = secs.get(".text", 0), secs.get(".rodata", 0)
+flash = sum(secs.get(s, 0) for s in (".text", ".rodata", ".srodata", ".ARM.exidx", ".data", ".sdata", ".got"))
+txt, ro = secs.get(".text", 0), secs.get(".rodata", 0) + secs.get(".srodata", 0)
 print(f"flash={flash} B (.text={txt} B, .rodata={ro} B)")
 ')"
 echo "PASS: linked $(wc -c < "$WORK/firmware.elf" | tr -d ' ')-byte ELF (${FLASH_SUMMARY}) against stubs.c only"

@@ -6,11 +6,17 @@
 import Synchronization
 
 struct ReadState: ~Copyable, ~Sendable {
-    let remaining: Atomic<UInt64>
+    // Word-sized atomic: 64-bit on 64-bit targets, 32-bit on 32-bit targets (UInt32.max
+    // words = 32 GiB, 512x the 64 MiB default and 128x the 32-bit address space). Enables
+    // riscv32 (ESP32-C6) where UInt64 is not AtomicRepresentable, and uses native 32-bit
+    // atomics on Cortex-M4 (armv7em) without software __atomic_*_8 helpers.
+    let remaining: Atomic<UInt>
     let failure: Atomic<UInt32>
 
     init(words: UInt64, error: ReadError) {
-        remaining = Atomic(words)
+        let cap = UInt64(_truncatingBits: UInt.max)
+        let clamped = words >= cap ? UInt.max : words._lowWord
+        remaining = Atomic(clamped)
         failure = Atomic(error.rawValue)
     }
 
@@ -20,12 +26,18 @@ struct ReadState: ~Copyable, ~Sendable {
     }
 
     borrowing func charge(_ words: UInt64) -> Bool {
+        let cap = UInt64(_truncatingBits: UInt.max)
+        guard words <= cap else {
+            report(.traversalLimit)
+            return false
+        }
+        let cost = words._lowWord
         // Retry both contention and spurious weak-CAS failure. Subtract only after the
         // comparison so hostile traversal sizes cannot wrap the unsigned budget.
         var current = remaining.load(ordering: .relaxed)
-        while current >= words {
+        while current >= cost {
             let result = remaining.weakCompareExchange(
-                expected: current, desired: current - words, ordering: .relaxed)
+                expected: current, desired: current - cost, ordering: .relaxed)
             if result.exchanged { return true }
             current = result.original
         }
@@ -80,7 +92,9 @@ public struct Arena: ~Copyable, ~Escapable, ~Sendable {
     /// Bytes occupied by the first frame, or zero if framing failed.
     public var consumedByteCount: Int { frame.valid ? frame.byteCount : 0 }
     /// Shared work budget, not unread input size: following a pointer again charges again.
-    public var remainingTraversalWords: UInt64 { state.remaining.load(ordering: .relaxed) }
+    public var remainingTraversalWords: UInt64 {
+        UInt64(_truncatingBits: state.remaining.load(ordering: .relaxed))
+    }
 
     /// Reserve additional traversal work; failure records `.traversalLimit`.
     @discardableResult

@@ -19,7 +19,8 @@ introduction, including what changes on an Embedded Swift target.
 | Code generation — `capnpc-swift` plugin binary and the SwiftPM build-tool plugin | ✅ Implemented and verified from a separate consumer package |
 | Embedded Swift / allocation-free runtime | ✅ Verified: `-no-allocations` compile, allocator-symbol audit, negative control, and 0 `unsafe` expressions under strict memory safety |
 | macOS and Linux (glibc) host execution | ✅ Verified in CI (31 runtime tests at 98.7% line coverage, C++ oracle conformance, 25 compile-fail fixtures, output-boundary hardening) |
-| ARMv7E-M bare metal | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`5,502 B` flash / `10,992 B` ELF on 6.4.2; `5,043 B` flash / `9,912 B` ELF on `main-2026-11-01`); not yet run on physical hardware |
+| ARMv7E-M bare metal | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`5,358 B` flash / `10,876 B` ELF on 6.4.2; `4,955 B` flash / `9,740 B` ELF on `main-2026-11-01`); not yet run on physical hardware |
+| RISC-V 32-bit bare metal (`rv32imac` / ESP32-C6) | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`6,812 B` flash / `14,612 B` ELF on 6.4.2; `6,405 B` flash / `19,056 B` ELF on `main-2026-11-01`); not yet run on physical hardware |
 | WebAssembly / WASI | ✅ Full and Embedded (`106,708 B`) Swift run the C++ oracle messages under WasmKit; Embedded allocation freedom checked by call-graph analysis |
 | Static Linux (musl) | 🟡 Verified locally on Swift 6.4.2 (`aarch64` native Linux `FROM scratch`, `x86_64` Rosetta-emulated `FROM scratch`); static ELF audit + 9/9 oracle messages pass; native `x86_64` Linux hardware pending |
 | Embedded builds with full debug info (`-g`) | 🟡 Fixed on Swift `main` (`main-snapshot-2026-11-01`); Swift 6.4.0–6.4.2 releases still need `-gline-tables-only` — see *Embedded debug info* below |
@@ -167,8 +168,11 @@ python3 ci/check-compile-fail.py --swiftc /path/to/swiftc --mode all \
   --generated /tmp/readers/readers.capnp.swift
 python3 ci/check-cross.py --swiftc /path/to/swiftc \
   --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
+python3 ci/check-cross.py --swiftc /path/to/swiftc \
+  --target riscv32-none-none-eabi --generated /tmp/readers/readers.capnp.swift
 SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-debug-info.sh
 SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-link.sh
+SWIFTC=/path/to/swift.org/usr/bin/swiftc TARGET=riscv32-none-none-eabi ci/check-link.sh
 python3 ci/check-wasm.py --swiftc /path/to/swiftc --readers-work /tmp/readers \
   --wasm-sdk /path/to/swift-6.4.0-RELEASE_wasm/wasm32-unknown-wasip1
 python3 ci/check-static-linux.py --swiftc /path/to/swiftc --readers-work /tmp/readers \
@@ -206,7 +210,8 @@ reference generated from doc comments.
 |---|---|---|
 | macOS host | 31 runtime tests (98.7% line coverage), generator + output-boundary hardening, C++ fixtures, 25 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
 | Linux x86-64 (glibc) | Host execution, strict `swift format` lint, and Embedded object checks in CI | Additional architectures and distributions |
-| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`5,502 B` flash / `10,992 B` ELF on 6.4.2; `5,043 B` flash / `9,912 B` ELF on `main-2026-11-01` with PAL `_swift_deallocate` negative-control rejection) | Device or QEMU execution |
+| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`5,358 B` flash / `10,876 B` ELF on 6.4.2; `4,955 B` flash / `9,740 B` ELF on `main-2026-11-01` with PAL `_swift_deallocate` negative-control rejection, zero atomic stubs) | Device or QEMU execution |
+| RISC-V 32-bit bare metal (`rv32imac`) | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`6,812 B` flash / `14,612 B` ELF on 6.4.2; `6,405 B` flash / `19,056 B` ELF on `main-2026-11-01`, zero atomic stubs) | Real hardware (e.g. ESP32-C6) execution |
 | Static Linux SDK (musl) | Verified locally with Swift 6.4.2 (`swift-6.4.2-RELEASE_static-linux-0.1.0`, musl 1.2.5): `aarch64` and `x86_64` statically linked ELF executables (`INTERP`/`DYNAMIC`/`NEEDED` absent) run all 9 C++ oracle messages + wrong-mode negative control in `FROM scratch` Linux containers (`aarch64` native arm64 Linux, `x86_64` Rosetta-emulated on Apple Silicon); SwiftPM `--swift-sdk` builds `CapnpRuntime` cleanly (SDK ships no `Testing` module). Full-Swift static binaries allocate; this is separate from `-no-allocations` | Native `x86_64` Linux hardware execution |
 | WebAssembly / WASI | Full and Embedded (`106,708 B`) builds run all C++ oracle messages under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
 
