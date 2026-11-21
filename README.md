@@ -21,7 +21,7 @@ introduction, including what changes on an Embedded Swift target.
 | macOS and Linux (glibc) host execution | ✅ Verified in CI |
 | ARMv7E-M bare metal | 🟡 Compiles, passes the allocation-freedom checks and links against a minimal stub platform with no libc or allocator; not yet run on physical hardware |
 | WebAssembly / WASI | ✅ Full and Embedded Swift run the C++ oracle messages under WasmKit; Embedded allocation freedom checked by call-graph analysis |
-| Static Linux (musl) | ⬜ Not yet verified |
+| Static Linux (musl) | 🟡 Verified locally on Swift 6.4.2 (`aarch64` native Linux `FROM scratch`, `x86_64` Rosetta-emulated `FROM scratch`); static ELF audit + 9/9 oracle messages pass; native `x86_64` Linux hardware pending |
 | Embedded builds with full debug info (`-g`) | 🟡 Swift compiler crash (upstream); use `-gline-tables-only` — see *Embedded debug info* below |
 | Writing or mutating messages (builders) | ⬜ Not implemented — planned for v2 |
 | RPC / capabilities | ⬜ Out of scope for this project |
@@ -167,6 +167,8 @@ SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-debug-info.sh
 SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-link.sh
 python3 ci/check-wasm.py --swiftc /path/to/swiftc --readers-work /tmp/readers \
   --wasm-sdk /path/to/swift-6.4.0-RELEASE_wasm/wasm32-unknown-wasip1
+python3 ci/check-static-linux.py --swiftc /path/to/swiftc --readers-work /tmp/readers \
+  --sdk-id swift-6.4.2-RELEASE_static-linux-0.1.0
 ```
 
 Use a Swift.org toolchain containing the Embedded standard library. `SDKROOT` can
@@ -201,7 +203,7 @@ reference generated from doc comments.
 | macOS host | Runtime tests, generator and C++ fixtures; Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
 | Linux x86-64 (glibc) | Host execution and Embedded object checks in CI | Additional architectures and distributions |
 | ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit and negative control; firmware image links against `ci/firmware/stubs.c` only (no libc, no allocator; an allocating control fails to link) | Device execution |
-| Static Linux SDK (musl) | Not yet verified | Separate SDK build, static link and Linux execution |
+| Static Linux SDK (musl) | Verified locally with Swift 6.4.2 (`swift-6.4.2-RELEASE_static-linux-0.1.0`, musl 1.2.5): `aarch64` and `x86_64` statically linked ELF executables (`INTERP`/`DYNAMIC`/`NEEDED` absent) run all 9 C++ oracle messages + wrong-mode negative control in `FROM scratch` Linux containers (`aarch64` native arm64 Linux, `x86_64` Rosetta-emulated on Apple Silicon); SwiftPM `--swift-sdk` builds `CapnpRuntime` cleanly (SDK ships no `Testing` module). Full-Swift static binaries allocate; this is separate from `-no-allocations` | Native `x86_64` Linux hardware execution |
 | WebAssembly / WASI | Full and Embedded builds run all C++ oracle messages under WasmKit (CI) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
 
 Snapshot or vendor compilers reporting a newer Swift version are not automatically
