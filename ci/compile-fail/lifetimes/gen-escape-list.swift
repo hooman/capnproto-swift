@@ -1,5 +1,5 @@
 // REQUIRES: generated
-// EXPECT-ERROR: requires that 'Capnp_9eb32e19f86f3a01\.ExampleReader\._CapnpList[0-9]+' conform to 'Escapable'
+// EXPECT-ERROR: requires that 'CapnpList<Capnp_9eb32e19f86f3a01\.ExampleReader\.ChildReader>' conform to 'Escapable'
 
 import CapnpRuntime
 

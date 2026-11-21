@@ -86,19 +86,98 @@ public struct ListReader: ~Escapable, ~Sendable {
     }
 }
 
+/// An element decoded from a borrowed `ListReader`, including nonescapable views.
+public protocol CapnpListElement: ~Escapable {
+    /// Expected Cap'n Proto wire encoding for a list of this element type.
+    static var listElementEncoding: ElementSize { get }
+
+    @_lifetime(copy list)
+    static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self
+}
+
+/// Generated struct readers conform to this protocol so `CapnpList<MyStructReader>`
+/// specializes directly without per-field generated wrapper structs.
+public protocol CapnpStructReader: CapnpListElement, ~Escapable {
+    @_lifetime(copy reader)
+    init(_ reader: consuming StructReader)
+}
+
+extension CapnpStructReader where Self: ~Escapable {
+    public static var listElementEncoding: ElementSize { .inlineComposite }
+
+    @_lifetime(copy list)
+    public static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self {
+        Self(list.structure(at: index))
+    }
+}
+
+/// Generic indexed view of nonescapable list elements (structs, text, data, nested lists).
+/// Specializes across Embedded module boundaries without existential dispatch.
+public struct CapnpList<Element: CapnpListElement & ~Escapable>:
+    ~Escapable, ~Sendable, CapnpListElement
+{
+    let reader: ListReader
+
+    @_lifetime(copy reader)
+    public init(_ reader: consuming ListReader) {
+        self.reader = reader
+    }
+
+    public var count: Int { reader.count }
+
+    public subscript(index: Int) -> Element {
+        @_lifetime(copy self)
+        get { Element.decodeElement(from: reader, at: index) }
+    }
+
+    public static var listElementEncoding: ElementSize { .pointer }
+
+    @_lifetime(copy list)
+    public static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self {
+        Self(list.pointer(at: index).list(of: Element.listElementEncoding))
+    }
+}
+
+/// Indexed view of `List(Void)`; indexing validates bounds without loading payload bytes.
+public struct VoidList: ~Escapable, ~Sendable, CapnpListElement {
+    let reader: ListReader
+
+    @_lifetime(copy reader)
+    public init(_ reader: consuming ListReader) {
+        self.reader = reader
+    }
+
+    public var count: Int { reader.count }
+    public subscript(index: Int) -> Void { reader.void(at: index) }
+
+    public static var listElementEncoding: ElementSize { .pointer }
+
+    @_lifetime(copy list)
+    public static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self {
+        Self(list.pointer(at: index).list(of: .void))
+    }
+}
+
 /// By-value lists specialize at their concrete primitive element type.
-public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable, ~Sendable {
+public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable, ~Sendable, CapnpListElement {
     let reader: ListReader
     let zero: Element
 
     /// Supply the element type's zero value, not a field default: primitive list elements
     /// have no schema XOR mask. A nonzero value would alter every decoded element.
     @_lifetime(copy reader)
-    public init(_ reader: consuming ListReader, zero: Element) {
+    public init(_ reader: consuming ListReader, zero: Element = Element.zero) {
         self.reader = reader
         self.zero = zero
     }
 
     public var count: Int { reader.count }
     public subscript(index: Int) -> Element { reader.data(at: index, default: zero) }
+
+    public static var listElementEncoding: ElementSize { .pointer }
+
+    @_lifetime(copy list)
+    public static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self {
+        Self(list.pointer(at: index).list(of: Element.listElementSize))
+    }
 }

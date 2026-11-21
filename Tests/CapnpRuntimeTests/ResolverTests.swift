@@ -476,4 +476,33 @@ struct ResolverTests {
             #expect(arena.error == .invalidIndex)
         }
     }
+
+    @Test func genericCapnpListAndVoidListDecodeWithoutGeneratedWrappers() {
+        // Root has 2 pointers: pointer 0 = List(Text) with 1 element "ok\0"; pointer 1 = List(Void) of length 3.
+        let okWord: UInt64 = 0x6f | (0x6b << 8)
+        frame([
+            [
+                structWord(pointers: 2),
+                listWord(1, size: 6, count: 1),  // pointer 0 -> word 3 (pointer list)
+                listWord(2, size: 0, count: 3),  // pointer 1 -> word 5 (void list)
+                listWord(0, size: 2, count: 3),  // pointer element 0 -> word 4 ("ok\0")
+                okWord,
+            ]
+        ])
+        .withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                let texts = CapnpList<TextReader>(root.pointerField(at: 0).list(of: .pointer))
+                #expect(texts.count == 1)
+                let isOK = texts[0].utf8.bytesEqual(to: [0x6f, 0x6b])
+                #expect(isOK)
+
+                let voids = VoidList(root.pointerField(at: 1).list(of: .void))
+                #expect(voids.count == 3)
+                voids[0]
+                voids[2]
+            }
+            #expect(arena.error == .none)
+        }
+    }
 }

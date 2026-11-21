@@ -155,7 +155,7 @@ struct SwiftGenerator {
         let name = try localName(node)
         var lines = [
             availability,
-            "public struct \(name): ~Escapable {",
+            "public struct \(name): ~Escapable, ~Sendable, CapnpRuntime.CapnpStructReader {",
             "    private let _capnpReader: CapnpRuntime.StructReader",
             "    public static var _capnpTypeID: UInt64 { \(node.id) }",
             "    @_lifetime(copy reader)",
@@ -174,9 +174,8 @@ struct SwiftGenerator {
                 "    }",
             ]
         }
-        for (index, field) in node.fields.enumerated() {
-            let listName = "_CapnpList\(index)"
-            let type = try swiftType(field.type, listName: listName)
+        for field in node.fields {
+            let type = try swiftType(field.type)
             let reader =
                 field.discriminant == UInt16.max
                 ? "_capnpReader"
@@ -193,7 +192,7 @@ struct SwiftGenerator {
             } else {
                 expression = try pointerExpression(
                     field.type,
-                    pointer: "\(reader).pointerField(at: \(field.offset))", listName: listName)
+                    pointer: "\(reader).pointerField(at: \(field.offset))")
             }
             let isView: Bool
             if case .scalar = field.type { isView = false } else { isView = true }
@@ -204,9 +203,6 @@ struct SwiftGenerator {
                 lines.append("        \(expression)")
             }
             lines.append("    }")
-            if case .list(let element) = field.type {
-                lines += try renderList(element, name: listName).map { "    " + $0 }
-            }
         }
         var childNames: Set<String> = []
         for child in children(of: node.id) {
@@ -220,72 +216,33 @@ struct SwiftGenerator {
         return lines
     }
 
-    private func swiftType(_ type: FieldType, listName: String) throws -> String {
+    private func swiftType(_ type: FieldType) throws -> String {
         switch type {
         case .scalar(let scalar): return scalar.swift
         case .text: return "CapnpRuntime.TextReader"
         case .data: return "CapnpRuntime.DataReader"
         case .structure(let id): return try qualifiedName(id)
         case .list(let element):
-            if case .scalar(let scalar) = element, scalar != .void {
+            if case .scalar(.void) = element { return "CapnpRuntime.VoidList" }
+            if case .scalar(let scalar) = element {
                 return "CapnpRuntime.PrimitiveList<\(scalar.swift)>"
             }
-            return listName
+            return "CapnpRuntime.CapnpList<\(try swiftType(element))>"
         case .unsupported(let kind): throw CompilerFailure("unsupported field type \(kind)")
         }
     }
 
-    private func pointerExpression(_ type: FieldType, pointer: String, listName: String) throws
-        -> String
-    {
+    private func pointerExpression(_ type: FieldType, pointer: String) throws -> String {
         switch type {
         case .text: return "\(pointer).text()"
         case .data: return "\(pointer).data()"
         case .structure(let id): return "\(try qualifiedName(id))(\(pointer).structure())"
         case .list(let element):
             let list = "\(pointer).list(of: .\(element.encoding))"
-            if case .scalar(let scalar) = element, scalar != .void {
-                return "CapnpRuntime.PrimitiveList(\(list), zero: \(scalar.zero))"
-            }
-            return "\(listName)(\(list))"
+            if case .scalar(.void) = element { return "CapnpRuntime.VoidList(\(list))" }
+            if case .scalar = element { return "CapnpRuntime.PrimitiveList(\(list))" }
+            return "CapnpRuntime.CapnpList(\(list))"
         default: throw CompilerFailure("expected a supported pointer field")
         }
-    }
-
-    // Concrete wrappers let nested list/struct elements retain explicit borrowed
-    // lifetimes without an associated element type that implicitly requires Escapable.
-    private func renderList(_ element: FieldType, name: String) throws -> [String] {
-        if case .scalar(let scalar) = element, scalar != .void { return [] }
-        let nestedName = name + "Element"
-        let type = try swiftType(element, listName: nestedName)
-        let expression: String
-        if case .structure(let id) = element {
-            expression = "\(try qualifiedName(id))(_capnpReader.structure(at: index))"
-        } else if case .scalar(.void) = element {
-            expression = "_capnpReader.void(at: index)"
-        } else {
-            expression = try pointerExpression(
-                element, pointer: "_capnpReader.pointer(at: index)",
-                listName: nestedName)
-        }
-        var lines = [
-            availability, "public struct \(name): ~Escapable {",
-            "    private let _capnpReader: CapnpRuntime.ListReader",
-            "    @_lifetime(copy reader)",
-            "    public init(_ reader: consuming CapnpRuntime.ListReader) { _capnpReader = reader }",
-            "    public var count: Int { _capnpReader.count }",
-            "    public subscript(index: Int) -> \(type) {",
-        ]
-        if case .scalar(.void) = element {
-            lines.append("        \(expression)")
-        } else {
-            lines.append("        @_lifetime(copy self) get { \(expression) }")
-        }
-        lines.append("    }")
-        if case .list(let next) = element {
-            lines += try renderList(next, name: nestedName).map { "    " + $0 }
-        }
-        lines.append("}")
-        return lines
     }
 }

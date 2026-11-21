@@ -4,7 +4,7 @@
 // .invalidIndex instead of trapping on out-of-range reads.
 
 /// Borrowed byte view over a validated Data field, conforming to `Iterable`.
-public struct DataReader: ~Escapable, ~Sendable, Iterable {
+public struct DataReader: ~Escapable, ~Sendable, Iterable, CapnpListElement {
     let context: ReadContext
     private let _bytes: Span<UInt8>
 
@@ -16,7 +16,7 @@ public struct DataReader: ~Escapable, ~Sendable, Iterable {
 
     /// Borrowed zero-copy view of the underlying bytes.
     public var bytes: Span<UInt8> {
-        @_lifetime(borrow self)
+        @_lifetime(copy self)
         borrow { return _bytes }
     }
 
@@ -34,10 +34,17 @@ public struct DataReader: ~Escapable, ~Sendable, Iterable {
     public func makeBorrowingIterator() -> Span<UInt8>.BorrowingIterator {
         _bytes.makeBorrowingIterator()
     }
+
+    public static var listElementEncoding: ElementSize { .pointer }
+
+    @_lifetime(copy list)
+    public static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self {
+        list.pointer(at: index).data()
+    }
 }
 
 /// Valid UTF-8 bytes, excluding the wire NUL terminator. No allocating String conversion.
-public struct TextReader: ~Escapable, ~Sendable, Iterable {
+public struct TextReader: ~Escapable, ~Sendable, Iterable, CapnpListElement {
     let context: ReadContext
     private let _utf8: UTF8Span
 
@@ -57,7 +64,7 @@ public struct TextReader: ~Escapable, ~Sendable, Iterable {
 
     /// Borrowed zero-copy validated UTF-8 span (code units, scalars, and characters).
     public var utf8: UTF8Span {
-        @_lifetime(borrow self)
+        @_lifetime(copy self)
         borrow { return _utf8 }
     }
 
@@ -99,5 +106,12 @@ public struct TextReader: ~Escapable, ~Sendable, Iterable {
     @_lifetime(borrow self)
     public func makeBorrowingIterator() -> BorrowingIterator {
         BorrowingIterator(_utf8.span)
+    }
+
+    public static var listElementEncoding: ElementSize { .pointer }
+
+    @_lifetime(copy list)
+    public static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self {
+        list.pointer(at: index).text()
     }
 }

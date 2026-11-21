@@ -12,6 +12,12 @@ public protocol CapnpPrimitive {
     /// Positive bit width used for field addressing and bounds checks (Bool uses one bit).
     static var sizeInBits: Int { get }
 
+    /// Wire zero value for list elements (which carry no per-field XOR default).
+    static var zero: Self { get }
+
+    /// Cap'n Proto wire list-element size code for a list of this primitive.
+    static var listElementSize: ElementSize { get }
+
     /// Load the element at carrier-relative `bit`, XOR-unmasking with `default`.
     /// Caller must validate the complete element range in `span` before calling.
     /// `bit` is a multiple of 8 for every supported type except Bool.
@@ -22,6 +28,15 @@ public protocol CapnpPrimitive {
 
 extension CapnpPrimitive where Self: FixedWidthInteger & ConvertibleFromBytes {
     public static var sizeInBits: Int { Self.bitWidth }
+    public static var zero: Self { 0 }
+    public static var listElementSize: ElementSize {
+        switch Self.bitWidth {
+        case 8: return .byte
+        case 16: return .twoBytes
+        case 32: return .fourBytes
+        default: return .eightBytes
+        }
+    }
     public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Self)
         -> Self
     {
@@ -42,6 +57,8 @@ extension Int64: CapnpPrimitive {}
 
 extension Float: CapnpPrimitive {
     public static var sizeInBits: Int { 32 }
+    public static var zero: Float { 0 }
+    public static var listElementSize: ElementSize { .fourBytes }
     public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Float)
         -> Float
     {
@@ -52,6 +69,8 @@ extension Float: CapnpPrimitive {
 
 extension Double: CapnpPrimitive {
     public static var sizeInBits: Int { 64 }
+    public static var zero: Double { 0 }
+    public static var listElementSize: ElementSize { .eightBytes }
     public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Double)
         -> Double
     {
@@ -64,6 +83,8 @@ extension Double: CapnpPrimitive {
 
 extension Bool: CapnpPrimitive {
     public static var sizeInBits: Int { 1 }
+    public static var zero: Bool { false }
+    public static var listElementSize: ElementSize { .bit }
     public static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default d: Bool)
         -> Bool
     {
