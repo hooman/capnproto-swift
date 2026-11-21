@@ -4,7 +4,7 @@
 // conform to Sequence, whose element requirements do not fit this v1 borrowed API.
 
 /// Indexed view of all list encodings, including primitive/struct schema upgrades.
-public struct ListReader: ~Escapable {
+public struct ListReader: ~Escapable, ~Sendable {
     let context: ReadContext
     let startByte: Int
     public let count: Int
@@ -87,7 +87,7 @@ public struct ListReader: ~Escapable {
 }
 
 /// By-value lists specialize at their concrete primitive element type.
-public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable {
+public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable, ~Sendable {
     let reader: ListReader
     let zero: Element
 

@@ -39,9 +39,15 @@ private func useRuntime(_ framed: [UInt8], _ raw: RawSpan) -> UInt64 {
             child.pointerField(at: 1).list(of: .fourBytes), zero: UInt32(0))
         if prims.count > 0 { sum &+= UInt64(prims[0]) }
         let text = child.pointerField(at: 2).text()
-        if text.count > 0 { sum &+= UInt64(text[0]) }
+        if text.count > 0 { sum &+= UInt64(text[0]) &+ UInt64(text.utf8.count) }
+        var textIter = text.makeBorrowingIterator()
+        let textChunk = textIter.nextSpan(maxCount: 8)
+        sum &+= UInt64(textChunk.count)
         let data = child.pointerField(at: 3).data()
-        if data.count > 0 { sum &+= UInt64(data[0]) }
+        if data.count > 0 { sum &+= UInt64(data[0]) &+ UInt64(data.bytes[0]) }
+        var dataIter = data.makeBorrowingIterator()
+        let dataChunk = dataIter.nextSpan(maxCount: 8)
+        sum &+= UInt64(dataChunk.count)
         return sum
     }
 

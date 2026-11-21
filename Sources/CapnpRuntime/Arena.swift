@@ -5,7 +5,7 @@
 
 import Synchronization
 
-struct ReadState: ~Copyable {
+struct ReadState: ~Copyable, ~Sendable {
     let remaining: Atomic<UInt64>
     let failure: Atomic<UInt32>
 
@@ -36,7 +36,7 @@ struct ReadState: ~Copyable {
 
 /// Owns traversal state, borrowing the caller's message storage.
 /// Readers are constructed inside withRoot; neither they nor their children can escape it.
-public struct Arena: ~Copyable, ~Escapable {
+public struct Arena: ~Copyable, ~Escapable, ~Sendable {
     let bytes: RawSpan
     let state: ReadState
     let frame: Frame

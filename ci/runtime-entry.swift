@@ -18,9 +18,15 @@ public func capnpEmbeddedProbe(_ pointer: UnsafeRawPointer, _ count: Int) -> UIn
             root.pointerField(at: 2).list(of: .fourBytes), zero: UInt32(0))
         for i in 0..<primitives.count { sum &+= widen(primitives[i]) }
         let text = root.pointerField(at: 3).text()
+        sum &+= widen(text.utf8.count)
         for i in 0..<text.count { sum &+= widen(text[i]) }
         let data = root.pointerField(at: 4).data()
-        for i in 0..<data.count { sum &+= widen(data[i]) }
+        var dataIter = data.makeBorrowingIterator()
+        while true {
+            let chunk = dataIter.nextSpan(maxCount: 64)
+            if chunk.isEmpty { break }
+            for i in 0..<chunk.count { sum &+= widen(chunk[i]) }
+        }
         return sum
     }
     return result &+ widen(arena.error.rawValue)

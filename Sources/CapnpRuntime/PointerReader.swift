@@ -12,7 +12,7 @@ struct ResolvedPointer {
 }
 
 /// A borrowed pointer slot. Typed accessors validate and charge each traversal.
-public struct PointerReader: ~Escapable {
+public struct PointerReader: ~Escapable, ~Sendable {
     let context: ReadContext
     let segmentID: UInt32
     let pointerByte: Int
@@ -238,11 +238,12 @@ public struct PointerReader: ~Escapable {
             context.report(.invalidText)
             return TextReader(context: context)
         }
-        let data = DataReader(context: context, start: list.startByte, count: list.count - 1)
-        guard data.validUTF8() else {
+        let slice = Span<UInt8>(
+            viewing: context.bytes.extracting(list.startByte..<(list.startByte + list.count - 1)))
+        guard let utf8 = try? UTF8Span(validating: slice) else {
             context.report(.invalidText)
             return TextReader(context: context)
         }
-        return TextReader(context: context, start: list.startByte, count: list.count - 1)
+        return TextReader(context: context, utf8: utf8)
     }
 }

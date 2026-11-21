@@ -1,79 +1,103 @@
-// Blob readers retain a validated byte range instead of allocating Data or String.
-// Text is validated once when opened; subsequent indexing returns UTF-8 code units,
-// not characters, and excludes the wire terminator.
+// Blob readers retain validated, zero-copy stdlib spans instead of allocating Data or
+// String. Text is validated once when opened through UTF8Span(validating:); subsequent
+// indexing returns UTF-8 code units, excludes the wire terminator, and reports
+// .invalidIndex instead of trapping on out-of-range reads.
 
-public struct DataReader: ~Escapable {
+/// Borrowed byte view over a validated Data field, conforming to `Iterable`.
+public struct DataReader: ~Escapable, ~Sendable, Iterable {
     let context: ReadContext
-    let start: Int
-    public let count: Int
+    private let _bytes: Span<UInt8>
 
     @_lifetime(copy context)
     init(context: ReadContext, start: Int = 0, count: Int = 0) {
         self.context = context
-        self.start = start
-        self.count = count
+        self._bytes = Span<UInt8>(viewing: context.bytes.extracting(start..<(start + count)))
     }
 
+    /// Borrowed zero-copy view of the underlying bytes.
+    public var bytes: Span<UInt8> {
+        @_lifetime(borrow self)
+        borrow { return _bytes }
+    }
+
+    public var count: Int { _bytes.count }
+
     public subscript(index: Int) -> UInt8 {
-        guard index >= 0, index < count else {
+        guard index >= 0, index < _bytes.count else {
             context.report(.invalidIndex)
             return 0
         }
-        return context.bytes.load(fromByteOffset: start + index, as: UInt8.self)
+        return _bytes[index]
     }
 
-    // One pass, constant storage: the lead byte determines length and the allowed
-    // second-byte interval. Those intervals exclude overlong encodings, surrogates
-    // and scalars above U+10FFFF; remaining bytes need only be continuation bytes.
-    // Check the complete sequence extent before accessing any continuation byte.
-    func validUTF8() -> Bool {
-        var i = 0
-        while i < count {
-            let a = self[i]
-            if a < 0x80 {
-                i += 1
-                continue
-            }
-            let n: Int
-            var low: UInt8 = 0x80
-            var high: UInt8 = 0xbf
-            switch a {
-            case 0xc2...0xdf: n = 2
-            case 0xe0:
-                n = 3
-                low = 0xa0
-            case 0xe1...0xec, 0xee...0xef: n = 3
-            case 0xed:
-                n = 3
-                high = 0x9f
-            case 0xf0:
-                n = 4
-                low = 0x90
-            case 0xf1...0xf3: n = 4
-            case 0xf4:
-                n = 4
-                high = 0x8f
-            default: return false
-            }
-            guard n <= count - i, self[i + 1] >= low, self[i + 1] <= high else { return false }
-            for j in 2..<n {
-                guard self[i + j] >= 0x80, self[i + j] <= 0xbf else { return false }
-            }
-            i += n
-        }
-        return true
+    @_lifetime(borrow self)
+    public func makeBorrowingIterator() -> Span<UInt8>.BorrowingIterator {
+        _bytes.makeBorrowingIterator()
     }
 }
 
 /// Valid UTF-8 bytes, excluding the wire NUL terminator. No allocating String conversion.
-public struct TextReader: ~Escapable {
-    let data: DataReader
+public struct TextReader: ~Escapable, ~Sendable, Iterable {
+    let context: ReadContext
+    private let _utf8: UTF8Span
 
     @_lifetime(copy context)
-    init(context: ReadContext, start: Int = 0, count: Int = 0) {
-        data = DataReader(context: context, start: start, count: count)
+    init(context: ReadContext) {
+        self.context = context
+        // An empty byte slice is unconditionally valid UTF-8.
+        let empty = Span<UInt8>(viewing: context.bytes.extracting(0..<0))
+        self._utf8 = try! UTF8Span(validating: empty)
     }
 
-    public var count: Int { data.count }
-    public subscript(index: Int) -> UInt8 { data[index] }
+    @_lifetime(copy context, copy utf8)
+    init(context: ReadContext, utf8: UTF8Span) {
+        self.context = context
+        self._utf8 = utf8
+    }
+
+    /// Borrowed zero-copy validated UTF-8 span (code units, scalars, and characters).
+    public var utf8: UTF8Span {
+        @_lifetime(borrow self)
+        borrow { return _utf8 }
+    }
+
+    /// Validated UTF-8 code units without the wire NUL terminator.
+    public var bytes: Span<UInt8> {
+        @_lifetime(copy self)
+        get { _utf8.span }
+    }
+
+    public var count: Int { _utf8.count }
+
+    public subscript(index: Int) -> UInt8 {
+        guard index >= 0, index < _utf8.count else {
+            context.report(.invalidIndex)
+            return 0
+        }
+        return _utf8.span[index]
+    }
+
+    /// Borrowing iterator over validated UTF-8 code units.
+    public struct BorrowingIterator: BorrowingIteratorProtocol, ~Escapable, ~Sendable {
+        let span: Span<UInt8>
+        var position: Int = 0
+
+        @_lifetime(copy span)
+        init(_ span: Span<UInt8>) { self.span = span }
+
+        @_lifetime(&self)
+        @_lifetime(self: copy self)
+        public mutating func nextSpan(maxCount: Int) -> Span<UInt8> {
+            let limit = max(0, maxCount)
+            let end = min(span.count, position + limit)
+            let chunk = span.extracting(position..<end)
+            position = end
+            return chunk
+        }
+    }
+
+    @_lifetime(borrow self)
+    public func makeBorrowingIterator() -> BorrowingIterator {
+        BorrowingIterator(_utf8.span)
+    }
 }

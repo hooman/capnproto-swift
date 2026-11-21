@@ -43,7 +43,7 @@ struct Frame {
     }
 }
 
-struct ReadContext: ~Escapable {
+struct ReadContext: ~Escapable, ~Sendable {
     let bytes: RawSpan
     let state: Ref<ReadState>?
     let frame: Frame

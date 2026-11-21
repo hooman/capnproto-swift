@@ -3,7 +3,7 @@
 // getters check only the requested field against that layout and apply its default.
 
 /// A borrowed struct data/pointer view. Missing fields read their schema defaults.
-public struct StructReader: ~Escapable {
+public struct StructReader: ~Escapable, ~Sendable {
     let context: ReadContext
     let dataStartByte: Int
     let dataSizeBits: Int

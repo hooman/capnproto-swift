@@ -424,4 +424,56 @@ struct ResolverTests {
             #expect(arena.error == .none)
         }
     }
+
+    @Test func blobReadersExposeSpansUTF8SpanAndIterable() {
+        // UTF-8 "hé" = [0x68, 0xc3, 0xa9, 0x00] (3 bytes + NUL); Data = [10, 20, 30]
+        let textWord: UInt64 = 0x68 | (0xc3 << 8) | (0xa9 << 16)
+        let dataWord: UInt64 = 10 | (20 << 8) | (30 << 16)
+        frame([
+            [
+                structWord(pointers: 2),
+                listWord(1, size: 2, count: 4),
+                listWord(1, size: 2, count: 3),
+                textWord,
+                dataWord,
+            ]
+        ])
+        .withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                let text = root.pointerField(at: 0).text()
+                #expect(text.count == 3)
+                #expect(text.utf8.count == 3)
+                let bytesMatch = text.utf8.bytesEqual(to: [0x68, 0xc3, 0xa9])
+                #expect(bytesMatch)
+                var scalars = text.utf8.makeUnicodeScalarIterator()
+                #expect(scalars.next() == Unicode.Scalar("h"))
+                #expect(scalars.next() == Unicode.Scalar("é"))
+                #expect(scalars.next() == nil)
+                var textBytes: [UInt8] = []
+                var textIter = text.makeBorrowingIterator()
+                while true {
+                    let chunk = textIter.nextSpan(maxCount: 2)
+                    if chunk.isEmpty { break }
+                    for i in 0..<chunk.count { textBytes.append(chunk[i]) }
+                }
+                #expect(textBytes == [0x68, 0xc3, 0xa9])
+                #expect(text[9] == 0)
+
+                let data = root.pointerField(at: 1).data()
+                #expect(data.count == 3)
+                #expect(data.bytes.count == 3)
+                #expect(data.bytes[0] == 10 && data.bytes[1] == 20 && data.bytes[2] == 30)
+                var sum: UInt32 = 0
+                var dataIter = data.makeBorrowingIterator()
+                while true {
+                    let chunk = dataIter.nextSpan(maxCount: 2)
+                    if chunk.isEmpty { break }
+                    for i in 0..<chunk.count { sum &+= UInt32(chunk[i]) }
+                }
+                #expect(sum == 60)
+            }
+            #expect(arena.error == .invalidIndex)
+        }
+    }
 }
