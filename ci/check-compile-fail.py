@@ -23,8 +23,9 @@ CONTRACT_DIRS = ('controls', 'lifetimes', 'ownership', 'concurrency', 'safety')
 TRIPWIRE_DIRS = ('tripwires',)
 ALL_DIRS = CONTRACT_DIRS + TRIPWIRE_DIRS
 
-STRICT_UPCOMING_SHARED = (
+STRICT_UPCOMING = (
     'ExistentialAny',
+    'InternalImportsByDefault',
     'MemberImportVisibility',
     'InferIsolatedConformances',
     'NonisolatedNonsendingByDefault',
@@ -149,7 +150,7 @@ def resolve_target_flags(swiftc: str, work: Path) -> list[str]:
         '-module-cache-path', str(work / 'cache'),
         '-target', triple,
     ]
-    for feature in STRICT_UPCOMING_SHARED:
+    for feature in STRICT_UPCOMING:
         flags += ['-enable-upcoming-feature', feature]
 
     if 'apple-macos' in triple:
@@ -178,7 +179,6 @@ def build_runtime_module(root: Path, swiftc: str, base_flags: list[str], work: P
     cmd = [
         swiftc,
         *base_flags,
-        '-enable-upcoming-feature', 'InternalImportsByDefault',
         '-O', '-wmo', '-parse-as-library',
         '-emit-module',
         '-module-name', 'CapnpRuntime',
@@ -206,10 +206,6 @@ def run_fixture(
 
     slug = re.sub(r'[^A-Za-z0-9._-]+', '_', spec.rel_path)
     cmd = [swiftc, *base_flags]
-    # D4b: SwiftGenerator currently emits `import CapnpRuntime` rather than `public import`.
-    # Keep InternalImportsByDefault active everywhere else; omit only when co-compiling generated code.
-    if not spec.requires_generated:
-        cmd += ['-enable-upcoming-feature', 'InternalImportsByDefault']
     if spec.requires_generated:
         cmd.append('-wmo')
     cmd += [
