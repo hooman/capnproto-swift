@@ -39,4 +39,18 @@ public enum ElementSize: UInt8 {
     }
 
     var pointerCount: Int { self == .pointer ? 1 : 0 }
+
+    /// Total decode from a 3-bit wire element-size code (0…7) without an optional trap.
+    init(code: UInt8) {
+        switch code {
+        case 0: self = .void
+        case 1: self = .bit
+        case 2: self = .byte
+        case 3: self = .twoBytes
+        case 4: self = .fourBytes
+        case 5: self = .eightBytes
+        case 6: self = .pointer
+        default: self = .inlineComposite
+        }
+    }
 }

@@ -27,24 +27,6 @@ public struct StructReader: ~Escapable, ~Sendable {
         self.nestingLimit = nestingLimit
     }
 
-    // Trusted fixture seam: supplied regions must already be in bounds. The nil state
-    // disables pointer traversal and error reporting; this is not an input validation path.
-    // TODO(test-fixtures): move trusted fixture construction into the test target and
-    // remove this initializer from production sources.
-    @_lifetime(borrow arena)
-    init(
-        arena: borrowing Arena, dataStartByte: Int, dataSizeBits: Int,
-        ptrStartByte: Int, ptrCount: Int, nestingLimit: Int = Wire.nestingLimit
-    ) {
-        self.init(
-            context: ReadContext(
-                bytes: arena.bytes, state: nil,
-                frame: arena.frame, baseID: arena.segmentID),
-            dataStartByte: dataStartByte, dataSizeBits: dataSizeBits,
-            ptrStartByte: ptrStartByte, ptrCount: ptrCount,
-            segmentID: arena.segmentID, nestingLimit: nestingLimit)
-    }
-
     /// Read an offset measured in units of T (bits for Bool), applying the schema XOR mask.
     /// A field not wholly present in the data section returns its default.
     public func data<T: CapnpPrimitive>(at offset: Int, default value: T) -> T {

@@ -505,4 +505,244 @@ struct ResolverTests {
             #expect(arena.error == .none)
         }
     }
+
+    @Test func floatAndAllPrimitiveMetadata() {
+        let f1 = Float(1.25).bitPattern
+        let f2 = Float(-3.5).bitPattern ^ Float(2.0).bitPattern
+        let word = UInt64(f1) | (UInt64(f2) << 32)
+        frame([[structWord(data: 1), word]]).withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                #expect(root.data(at: 0, default: Float(0)) == 1.25)
+                #expect(root.data(at: 1, default: Float(2.0)) == -3.5)
+                #expect(root.data(at: 2, default: Float(7.5)) == 7.5)
+            }
+            #expect(arena.error == .none)
+        }
+        #expect(Bool.zero == false && Bool.listElementSize == .bit)
+        #expect(Int8.zero == 0 && Int8.listElementSize == .byte)
+        #expect(UInt8.zero == 0 && UInt8.listElementSize == .byte)
+        #expect(Int16.zero == 0 && Int16.listElementSize == .twoBytes)
+        #expect(UInt16.zero == 0 && UInt16.listElementSize == .twoBytes)
+        #expect(Int32.zero == 0 && Int32.listElementSize == .fourBytes)
+        #expect(UInt32.zero == 0 && UInt32.listElementSize == .fourBytes)
+        #expect(Int64.zero == 0 && Int64.listElementSize == .eightBytes)
+        #expect(UInt64.zero == 0 && UInt64.listElementSize == .eightBytes)
+        #expect(Float.zero == 0 && Float.listElementSize == .fourBytes)
+        #expect(Double.zero == 0 && Double.listElementSize == .eightBytes)
+    }
+
+    @Test func unionMemberBorrowedAndNestedCapnpListElements() {
+        struct ItemReader: ~Escapable, ~Sendable, CapnpStructReader {
+            let reader: StructReader
+            @_lifetime(copy reader)
+            init(_ reader: consuming StructReader) { self.reader = reader }
+            var value: UInt64 { reader.data(at: 0, default: UInt64(0)) }
+        }
+
+        // Root: 1 data word (discriminant = 2 at UInt16 offset 0, value = 77 at UInt16 offset 1),
+        // 5 pointers:
+        //   0: List(ItemReader) = [(value: 42)]
+        //   1: List(Data) = [[0xaa, 0xbb]]
+        //   2: List(List(Text)) = [["hi"]]
+        //   3: List(List(Void)) = [[void, void]]
+        //   4: List(List(UInt32)) = [[10, 20]]
+        let rootData: UInt64 = UInt64(2) | (UInt64(77) << 16)
+        let hiWord: UInt64 = 0x68 | (0x69 << 8)
+        let dataWord: UInt64 = 0xaa | (0xbb << 8)
+        let u32Pair: UInt64 = UInt64(10) | (UInt64(20) << 32)
+        // Word layout inside segment 0:
+        //   0: root pointer (data=1, ptrs=5)
+        //   1: root data word
+        //   2..6: root pointers 0..4
+        //   7..8: ptr0 target: inlineComposite tag (count=1, data=1, ptrs=0) + item word (42)
+        //   9..10: ptr1 target: pointer list (count=1) -> word 10 (dataWord)
+        //   11..13: ptr2 target: pointer list (count=1) -> word 12 (pointer list count=1) -> word 13 (hiWord)
+        //   14: ptr3 target: pointer list (count=1) -> void list (count=2)
+        //   15..16: ptr4 target: pointer list (count=1) -> word 16 (u32Pair)
+        frame([
+            [
+                structWord(data: 1, pointers: 5),
+                rootData,
+                listWord(4, size: 7, count: 1),   // slot 2 -> word 7
+                listWord(5, size: 6, count: 1),   // slot 3 -> word 9
+                listWord(6, size: 6, count: 1),   // slot 4 -> word 11
+                listWord(8, size: 6, count: 1),   // slot 5 -> word 14
+                listWord(8, size: 6, count: 1),   // slot 6 -> word 15
+                structWord(1, data: 1), 42,       // words 7..8
+                listWord(0, size: 2, count: 2), dataWord,  // words 9..10
+                listWord(0, size: 6, count: 1),   // word 11 -> word 12
+                listWord(0, size: 2, count: 3),   // word 12 -> word 13
+                hiWord,                           // word 13
+                listWord(0, size: 0, count: 2),   // word 14 (void list)
+                listWord(0, size: 4, count: 2), u32Pair,   // words 15..16
+            ]
+        ])
+        .withUnsafeBytes { bytes in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena.withRoot { root in
+                let active = root.unionMember(at: 0, equals: 2)
+                let inactive = root.unionMember(at: 0, equals: 1)
+                #expect(active.data(at: 1, default: UInt16(0)) == 77)
+                #expect(inactive.data(at: 1, default: UInt16(9)) == 9)
+                #expect(root.borrowed().data(at: 1, default: UInt16(0)) == 77)
+
+                let items = CapnpList<ItemReader>(
+                    root.pointerField(at: 0).list(of: ItemReader.listElementEncoding))
+                #expect(items.count == 1 && items[0].value == 42)
+
+                let blobs = CapnpList<DataReader>(
+                    root.pointerField(at: 1).list(of: DataReader.listElementEncoding))
+                #expect(blobs.count == 1 && blobs[0].count == 2)
+                #expect(blobs[0][0] == 0xaa && blobs[0][1] == 0xbb)
+
+                let nestedTexts = CapnpList<CapnpList<TextReader>>(
+                    root.pointerField(at: 2).list(of: CapnpList<TextReader>.listElementEncoding))
+                #expect(nestedTexts.count == 1 && nestedTexts[0].count == 1)
+                let textBytes = nestedTexts[0][0].bytes
+                #expect(textBytes.count == 2 && textBytes[0] == 0x68 && textBytes[1] == 0x69)
+
+                let nestedVoids = CapnpList<VoidList>(
+                    root.pointerField(at: 3).list(of: VoidList.listElementEncoding))
+                #expect(nestedVoids.count == 1 && nestedVoids[0].count == 2)
+
+                let nestedPrimitives = CapnpList<PrimitiveList<UInt32>>(
+                    root.pointerField(at: 4).list(of: PrimitiveList<UInt32>.listElementEncoding))
+                #expect(nestedPrimitives.count == 1 && nestedPrimitives[0].count == 2)
+                #expect(nestedPrimitives[0][0] == 10 && nestedPrimitives[0][1] == 20)
+            }
+            #expect(arena.error == .none)
+
+            // Exercise DataReader out-of-range subscript error path separately.
+            let arena2 = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+            arena2.withRoot { root in
+                let blobs = CapnpList<DataReader>(root.pointerField(at: 1).list(of: .pointer))
+                #expect(blobs[0][99] == 0)
+            }
+            #expect(arena2.error == .invalidIndex)
+        }
+    }
+
+    @Test func unsupportedDefaultDataMismatchCapabilitiesAndArenaCharge() {
+        let capWord: UInt64 = 3 | (UInt64(42) << 32)
+        #expect(RawPointer(capWord).kind == .other)
+        #expect(RawPointer(capWord).capabilityIndex == 42)
+
+        // Non-null struct default -> .unsupportedDefault; null default -> .none.
+        frame([[structWord(pointers: 3), 0, listWord(0, size: 4, count: 1), capWord, 0x1234]])
+            .withUnsafeBytes { bytes in
+                let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+                #expect(arena.charge(words: 5) == true)
+                arena.withRoot { root in
+                    #expect(root.pointerField(at: 0).structure(default: RawPointer(0)).pointer(at: 0).isNull)
+                    // Capability pointer is non-null on wire, but dereferences cleanly as empty.
+                    #expect(root.pointerField(at: 2).isNull == false)
+                    #expect(root.pointerField(at: 2).structure().data(at: 0, default: UInt64(5)) == 5)
+                }
+                #expect(arena.error == .none)
+
+                let badDefault = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+                badDefault.withRoot { root in
+                    _ = root.pointerField(at: 0).structure(default: RawPointer(4))
+                }
+                #expect(badDefault.error == .unsupportedDefault)
+
+                // data() on a fourBytes list must reject with .typeMismatch.
+                let badData = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
+                badData.withRoot { root in
+                    #expect(root.pointerField(at: 1).data().count == 0)
+                }
+                #expect(badData.error == .typeMismatch)
+
+                // Explicit arena.charge exhaustion.
+                let lowBudget = Arena(
+                    framedBytes: RawSpan(_unsafeBytes: bytes),
+                    options: ReaderOptions(traversalLimitWords: 2, nestingLimit: -5))
+                #expect(lowBudget.charge(words: 3) == false)
+                #expect(lowBudget.error == .traversalLimit)
+            }
+    }
+
+    @Test func unframedEmptySegmentAndCrossSegmentRejection() {
+        // Empty 0-byte unframed segment has valid alignment, so withRoot hits PointerReader
+        // invalid-slot validation on both isNull and resolve().
+        let empty: [UInt8] = []
+        empty.withUnsafeBytes { raw in
+            let arena = Arena(bytes: RawSpan(_unsafeBytes: raw))
+            #expect(arena.error == .none)
+            arena.withRoot { root in
+                #expect(root.data(at: 0, default: UInt64(9)) == 9)
+            }
+            #expect(arena.error == .invalidPointer)
+        }
+        // Unaligned unframed segment fails framing immediately.
+        let unaligned: [UInt8] = [1, 2, 3]
+        unaligned.withUnsafeBytes { raw in
+            let arena = Arena(bytes: RawSpan(_unsafeBytes: raw))
+            #expect(arena.error == .invalidFrame)
+        }
+        // Unframed Arena(bytes:segmentID: 2) rejects far pointers targeting another segment ID.
+        let words: [UInt64] = [structWord(pointers: 1), farWord(0)]
+        words.withUnsafeBytes { raw in
+            let arena = Arena(bytes: RawSpan(_unsafeBytes: raw), segmentID: 2)
+            arena.withRoot { root in
+                #expect(root.pointerField(at: 0).structure().data(at: 0, default: UInt64(7)) == 7)
+            }
+            #expect(arena.error == .invalidPointer)
+        }
+        // PointerReader.isNull invalid-slot path when segment lookup fails.
+        frame([[structWord(pointers: 1), 0]]).withUnsafeBytes { raw in
+            let arena = Arena(framedBytes: RawSpan(_unsafeBytes: raw))
+            arena.withRoot { root in
+                let badSlot = PointerReader(
+                    context: root.context, segmentID: 99, pointerByte: 0, nestingLimit: 4)
+                #expect(badSlot.isNull == true)
+            }
+            #expect(arena.error == .invalidPointer)
+        }
+        #expect(widen(UInt8(0xab)) == 0xab)
+    }
+
+    @Test func multiSegmentMalformedTraversal() {
+        var random: UInt64 = 0xfeed_face_cafe_beef
+        func next() -> UInt64 {
+            random = random &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return random
+        }
+        for _ in 0..<1000 {
+            var seg0: [UInt64] = [structWord(pointers: 6)]
+            for i in 0..<6 {
+                let raw = next()
+                switch i {
+                case 0: seg0.append(farWord(UInt32(raw % 4), position: UInt32((raw >> 8) % 6)))
+                case 1:
+                    seg0.append(
+                        farWord(UInt32(raw % 4), position: UInt32((raw >> 8) % 6), double: true))
+                default: seg0.append(raw)
+                }
+            }
+            let seg1 = (0..<6).map { _ in next() }
+            let seg2 = (0..<6).map { _ in next() }
+            frame([seg0, seg1, seg2]).withUnsafeBytes { bytes in
+                let arena = Arena(
+                    framedBytes: RawSpan(_unsafeBytes: bytes),
+                    options: ReaderOptions(traversalLimitWords: 64, nestingLimit: 8))
+                arena.withRoot { root in
+                    for i in 0..<6 {
+                        let ptr = root.pointerField(at: i)
+                        _ = ptr.isNull
+                        _ = ptr.structure().data(at: 0, default: UInt64(0))
+                        _ = ptr.text().count
+                        _ = ptr.data().count
+                        let list = ptr.list(of: .inlineComposite)
+                        for j in 0..<min(list.count, 4) {
+                            _ = list.structure(at: j).data(at: 0, default: UInt64(0))
+                            _ = list.pointer(at: j).data().count
+                        }
+                    }
+                }
+                #expect(arena.remainingTraversalWords <= 64)
+            }
+        }
+    }
 }

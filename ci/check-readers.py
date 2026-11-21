@@ -109,9 +109,6 @@ if not args.skip_compile_fail:
         print(output, flush=True)
 
 # Compiler diagnostics must be nonzero, actionable, and leave no partial output.
-# TODO(output-tests): cover lexical and symlink output-directory escapes, and inject
-# filesystem failures to verify/report partial multi-file writes. Current rejection
-# cases exercise request/schema validation, not the output filesystem boundary.
 unsupported = {
     'enum': 'enum Color { red @0; }',
     'interface': 'interface Service {}',
@@ -131,6 +128,109 @@ for name, schema in unsupported.items():
 for data in [b'', b'garbage', b'\0' * 8, (work / 'message-1-None.bin').read_bytes()]:
     run([plugin], data=data, reject=r'capnpc-swift:')
 print(f'PASS: {len(unsupported)} unsupported schemas and 4 invalid requests', flush=True)
+
+
+def make_code_generator_request(filenames):
+    """Build a minimal framed CodeGeneratorRequest containing empty file nodes."""
+    def struct_word(offset, data_words=0, ptr_words=0):
+        return ((offset & 0x3fffffff) << 2) | (data_words << 32) | (ptr_words << 48)
+
+    def list_word(offset, size_code, count):
+        return ((offset & 0x3fffffff) << 2) | 1 | ((count << 3 | size_code) << 32)
+
+    n = len(filenames)
+    # Segment 0 layout:
+    #   word 0: root struct pointer (data=0, ptrs=2) -> word 1
+    #   word 1: ptr 0 (nodes inlineComposite list) -> word 3
+    #   word 2: ptr 1 (requestedFiles inlineComposite list) -> word 3 + 1 + 2*n
+    nodes_start = 3
+    nodes_words = 1 + 2 * n
+    req_start = nodes_start + nodes_words
+    req_words = 1 + 2 * n
+    words = [
+        struct_word(0, 0, 2),
+        list_word(nodes_start - 2, 7, 2 * n),
+        list_word(req_start - 3, 7, 2 * n),
+        struct_word(n, 2, 0),
+    ]
+    for i in range(n):
+        words.extend([0x1001 + i, 0])  # id, kind=0 (file)
+    words.append(struct_word(n, 1, 1))
+    # Reserve requestedFiles entries, then append NUL-terminated UTF-8 filename blobs.
+    blob_start = req_start + req_words
+    blob_words = []
+    for i, name in enumerate(filenames):
+        raw = name.encode('utf-8') + b'\x00'
+        padded = raw + b'\x00' * ((-len(raw)) % 8)
+        ptr_slot = req_start + 1 + 2 * i + 1
+        target_word = blob_start + len(blob_words)
+        words.append(0x1001 + i)
+        words.append(list_word(target_word - (ptr_slot + 1), 2, len(raw)))
+        for off in range(0, len(padded), 8):
+            blob_words.append(struct.unpack_from('<Q', padded, off)[0])
+    words.extend(blob_words)
+    header = struct.pack('<II', 0, len(words))
+    return header + struct.pack(f'<{len(words)}Q', *words)
+
+
+def run_in(directory, command, *, data=None, reject=None):
+    result = subprocess.run([str(x) for x in command], input=data, capture_output=True, cwd=directory)
+    if reject is not None:
+        assert result.returncode != 0, f'Unexpected success: {command}'
+        assert re.search(reject, result.stderr.decode(), re.I), result.stderr.decode()
+    elif result.returncode:
+        raise RuntimeError(f'{command}\n{result.stdout.decode()}\n{result.stderr.decode()}')
+    return result.stdout
+
+
+# Output-boundary hardening: lexical escapes, symlinked parent/leaf escapes, directory collisions,
+# and rollback of newly created files on multi-file write failure.
+out_box = work / 'output-hardening'
+out_dir = out_box / 'out'
+outside_dir = out_box / 'outside'
+out_dir.mkdir(parents=True)
+outside_dir.mkdir(parents=True)
+(outside_dir / 'real.swift').write_text('sentinel\n')
+(out_dir / 'sublink').symlink_to(outside_dir)
+(out_dir / 'deadlink').symlink_to(outside_dir / 'missing')
+(out_dir / 'existing.capnp.swift').symlink_to(outside_dir / 'real.swift')
+(out_dir / 'dangling.capnp.swift').symlink_to(outside_dir / 'dangling.swift')
+(out_dir / 'dircoll.capnp.swift').mkdir()
+(out_dir / 'fileparent').write_text('not a dir\n')
+
+for bad_name in ['../escape.capnp', 'a//b.capnp', 'trailing/', '/abs.capnp', 'a\x7fb.capnp']:
+    run_in(out_dir, [plugin], data=make_code_generator_request([bad_name]),
+           reject=r'capnpc-swift:.*unsafe output filename')
+
+for escaped_name in [
+    'sublink/new.capnp',
+    'sublink/nested/new.capnp',
+    'deadlink/new.capnp',
+    'existing.capnp',
+    'dangling.capnp',
+    'dircoll.capnp',
+    'fileparent/child.capnp',
+]:
+    run_in(out_dir, [plugin], data=make_code_generator_request([escaped_name]),
+           reject=r'capnpc-swift:.*(escape|symbolic link|existing directory|not a directory)')
+
+assert sorted(p.name for p in outside_dir.iterdir()) == ['real.swift']
+assert (outside_dir / 'real.swift').read_text() == 'sentinel\n'
+
+# Multi-file write failure: file #1 would be newly created, file #2 hits a read-only parent dir.
+# File #1 must be rolled back so no partial newly created output remains.
+ro_dir = out_dir / 'readonly'
+ro_dir.mkdir()
+ro_dir.chmod(0o555)
+try:
+    run_in(out_dir, [plugin],
+           data=make_code_generator_request(['first.capnp', 'readonly/second.capnp']),
+           reject=r'capnpc-swift:')
+    assert not (out_dir / 'first.capnp.swift').exists(), 'partial newly-created file left behind'
+    assert not (ro_dir / 'second.capnp.swift').exists()
+finally:
+    ro_dir.chmod(0o755)
+print('PASS: output-boundary hardening (lexical, symlink parent/leaf, collision, rollback)', flush=True)
 
 # A large real compiler request must exercise multi-segment bootstrap decoding.
 large = work / 'large.capnp'

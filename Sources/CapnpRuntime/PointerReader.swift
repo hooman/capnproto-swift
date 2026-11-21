@@ -156,7 +156,7 @@ public struct PointerReader: ~Escapable, ~Sendable {
             context.report(.invalidPointer)
             return empty
         }
-        let encoding = ElementSize(rawValue: p.listElementSizeCode)!
+        let encoding = ElementSize(code: p.listElementSizeCode)
         var count = Int(p.listElementCount)
         var dataBits = encoding.dataBits
         var pointerCount = encoding.pointerCount

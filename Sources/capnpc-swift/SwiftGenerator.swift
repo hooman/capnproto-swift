@@ -21,9 +21,11 @@ struct SwiftGenerator {
         var paths: Set<String> = []
         for file in request.files {
             guard !file.filename.isEmpty, !file.filename.hasPrefix("/"),
-                !file.filename.contains("\\"),
-                file.filename.split(separator: "/").allSatisfy({ $0 != "." && $0 != ".." }),
-                !file.filename.unicodeScalars.contains(where: { $0.value < 32 })
+                !file.filename.hasSuffix("/"), !file.filename.contains("\\"),
+                file.filename.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({
+                    !$0.isEmpty && $0 != "." && $0 != ".."
+                }),
+                !file.filename.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 })
             else {
                 throw CompilerFailure("unsafe output filename: \(file.filename.debugDescription)")
             }

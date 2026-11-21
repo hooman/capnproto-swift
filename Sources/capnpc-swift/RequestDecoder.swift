@@ -23,10 +23,7 @@ enum RequestDecoder {
     }
 
     static func string(_ reader: borrowing TextReader) -> String {
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(reader.count)
-        for i in 0..<reader.count { bytes.append(reader[i]) }
-        return String(decoding: bytes, as: UTF8.self)
+        String(copying: reader.utf8)
     }
 
     // TODO(codegen-docs): decode CodeGeneratorRequest.sourceInfo and carry declaration
@@ -113,16 +110,31 @@ enum RequestDecoder {
             }
             expression = scalarDefault(value, scalar)
         case .text:
+            guard value.data(at: 0, default: UInt16(0)) == 12 else {
+                throw CompilerFailure("default type mismatch for \(name)")
+            }
             unsupportedDefault = value.pointerField(at: 0).text().count != 0
             expression = ""
         case .data:
+            guard value.data(at: 0, default: UInt16(0)) == 13 else {
+                throw CompilerFailure("default type mismatch for \(name)")
+            }
             unsupportedDefault = value.pointerField(at: 0).data().count != 0
             expression = ""
         case .list(let element):
-            let size = CapnpRuntime.ElementSize(rawValue: encodingCode(element))!
+            guard value.data(at: 0, default: UInt16(0)) == 14 else {
+                throw CompilerFailure("default type mismatch for \(name)")
+            }
+            let size = elementSize(element)
             unsupportedDefault = value.pointerField(at: 0).list(of: size).count != 0
             expression = ""
-        default:
+        case .structure:
+            guard value.data(at: 0, default: UInt16(0)) == 16 else {
+                throw CompilerFailure("default type mismatch for \(name)")
+            }
+            unsupportedDefault = !value.pointerField(at: 0).isNull
+            expression = ""
+        case .unsupported:
             unsupportedDefault = !value.pointerField(at: 0).isNull
             expression = ""
         }
@@ -145,12 +157,19 @@ enum RequestDecoder {
         }
     }
 
-    static func encodingCode(_ type: FieldType) -> UInt8 {
+    static func elementSize(_ type: FieldType) -> CapnpRuntime.ElementSize {
         switch type {
         case .scalar(let scalar):
-            return [0, 1, 2, 3, 4, 5, 2, 3, 4, 5, 4, 5][Int(scalar.rawValue)]
-        case .structure: return 7
-        default: return 6
+            switch scalar {
+            case .void: return .void
+            case .bool: return .bit
+            case .int8, .uint8: return .byte
+            case .int16, .uint16: return .twoBytes
+            case .int32, .uint32, .float32: return .fourBytes
+            case .int64, .uint64, .float64: return .eightBytes
+            }
+        case .structure: return .inlineComposite
+        default: return .pointer
         }
     }
 

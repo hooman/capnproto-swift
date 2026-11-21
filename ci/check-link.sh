@@ -17,6 +17,7 @@ BIN="$(dirname "$SWIFTC")"
 CLANG="${CLANG:-$BIN/clang}"
 LLD="${LLD:-$BIN/ld.lld}"
 NM="${NM:-$BIN/llvm-nm}"
+OBJDUMP="${OBJDUMP:-$BIN/llvm-objdump}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -40,7 +41,18 @@ echo "target: $TARGET"
 "$SWIFTC" "${FLAGS[@]}" -no-allocations -module-name firmware -c "${SRCS[@]}" \
     "$ROOT/ci/runtime-entry.swift" "$ROOT/ci/firmware/main.swift" -o "$WORK/firmware.o"
 "$LLD" -e _start --gc-sections "$WORK/firmware.o" "$WORK/stubs.o" -o "$WORK/firmware.elf"
-echo "PASS: linked $(wc -c < "$WORK/firmware.elf" | tr -d ' ')-byte image against stubs.c only"
+FLASH_SUMMARY="$("$OBJDUMP" -h "$WORK/firmware.elf" | python3 -c '
+import re, sys
+secs = {}
+for line in sys.stdin:
+    m = re.match(r"\s*\d+\s+(\.\S+)\s+([0-9a-fA-F]+)\s+", line)
+    if m:
+        secs[m.group(1)] = int(m.group(2), 16)
+flash = sum(secs.get(s, 0) for s in (".text", ".rodata", ".ARM.exidx", ".data", ".got"))
+txt, ro = secs.get(".text", 0), secs.get(".rodata", 0)
+print(f"flash={flash} B (.text={txt} B, .rodata={ro} B)")
+')"
+echo "PASS: linked $(wc -c < "$WORK/firmware.elf" | tr -d ' ')-byte ELF (${FLASH_SUMMARY}) against stubs.c only"
 
 ALLOCATORS="$(grep -v '^#' "$ROOT/ci/allocator-symbols.txt" | paste -sd '|' -)"
 if "$NM" "$WORK/firmware.elf" | grep -E "(^| )_?(${ALLOCATORS})\$"; then
