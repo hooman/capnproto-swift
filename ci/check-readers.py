@@ -285,6 +285,31 @@ print(run([annotated / 'verify', annotated / 'box.bin']).decode().strip(), flush
     '$Cxx.namespace("demo"); struct Point $Cxx.name("Pt") { x @0 :Int32 $Cxx.name("ex"); }')
 run([capnp, 'compile', '-o', plugin, 'cxx.capnp'])
 run([swiftc, *flags, '-I', host, '-typecheck', work / 'cxx.capnp.swift'])
+# Fields that use the schemas upstream installs. capnp only puts an import's nodes in the
+# request when something uses it, so an unused import would prove nothing. These files hold
+# annotations, interfaces, generics, enums, constants and implicit method structs.
+# (persistent.capnp offers only generic types, which a field cannot reference yet.)
+(work / 'upstream.capnp').write_text('''@0xa11071a7ed000009;
+using Cxx = import "/capnp/c++.capnp";
+using Schema = import "/capnp/schema.capnp";
+using Rpc = import "/capnp/rpc.capnp";
+using TwoParty = import "/capnp/rpc-twoparty.capnp";
+using Stream = import "/capnp/stream.capnp";
+using Json = import "/capnp/compat/json.capnp";
+$Cxx.namespace("probe");
+struct Uses {
+  node @0 :Schema.Node;
+  message @1 :Rpc.Message;
+  vat @2 :TwoParty.VatId;
+  stream @3 :Stream.StreamResult;
+  json @4 :Json.Value;
+}
+''')
+request = run([capnp, 'compile', '-o-', 'upstream.capnp'])
+assert len(request) > 64 * 1024, 'upstream imports no longer reach the request'
+run([plugin], data=request)
+# Not typechecked: it names readers for upstream files that cannot be generated yet (enums).
+assert (work / 'upstream.capnp.swift').is_file()
 # An unused interface in an imported file does not block generation; a field that uses one does.
 (work / 'service.capnp').write_text('@0xa11071a7ed000004; interface Service {} '
     'annotation note(*) :Void; struct Plain { id @0 :UInt64; }')
@@ -302,7 +327,7 @@ assert not (work / 'uses-service.capnp.swift').exists()
     'struct Box { colors @0 :List(C.Color) = [red, green]; }')
 run([capnp, 'compile', '-o', plugin, 'enum-list-default.capnp'],
     reject=r'capnpc-swift:.*unsupported non-empty pointer default')
-print('PASS: annotations tolerated, golden output, c++.capnp import, interface diagnostics', flush=True)
+print('PASS: annotations tolerated, golden output, upstream imports, interface diagnostics', flush=True)
 
 
 if not args.host_only:

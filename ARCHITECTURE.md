@@ -68,9 +68,10 @@ The host executable buffers at most 64 MiB from stdin and decodes exactly one
 unpacked `CodeGeneratorRequest` through the runtime. Bootstrap offsets are
 transcribed from upstream `schema.capnp.h`. It builds an owned schema model,
 validates the supported subset, renders all files, then writes output. Annotations are
-never read, and annotation declarations are skipped. Other unsupported features in a
-requested file, or in a type a generated field references, produce a nonzero exit with
-a `capnpc-swift:` diagnostic. Output filenames
+never read, and annotation declarations are skipped. Other unsupported declarations in a
+requested file, and fields whose own type is unsupported (an enum, interface, AnyPointer
+or generic type, even when imported), produce a nonzero exit with a `capnpc-swift:`
+diagnostic. An imported struct is checked only when its own file is generated. Output filenames
 must be relative with no empty, `.`, `..`, or control-character components; preflight
 walks existing parent components via `lstat` so symlinked directories are resolved even
 when the leaf file does not yet exist, and rejects escaping symlinks, symlink leaves,
