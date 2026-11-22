@@ -17,15 +17,9 @@ on:
       - 'ci/**'
       - '.swift-format'
       - '.github/workflows/embedded-clean.yml'
+  # No path filter on pull requests: the main ruleset requires these checks, and a
+  # path-filtered PR (docs only) would never report them and could never merge.
   pull_request:
-    paths:
-      - 'Sources/**'
-      - 'Tests/**'
-      - 'Plugins/**'
-      - 'Package.swift'
-      - 'ci/**'
-      - '.swift-format'
-      - '.github/workflows/embedded-clean.yml'
   schedule:
     - cron: '17 6 * * 1'   # Mondays: main-snapshot lane
   workflow_dispatch:
