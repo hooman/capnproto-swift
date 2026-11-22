@@ -1,0 +1,41 @@
+name: dco
+
+# Developer Certificate of Origin: every commit in a pull request must carry a
+# `Signed-off-by:` trailer whose email matches the commit author (`git commit -s`).
+# See CONTRIBUTING.md. Required by the `main` ruleset.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: DCO
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Check Signed-off-by on every commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS=$'\t' read -r sha email subject; do
+            signoffs=$(git log -1 --format='%(trailers:key=Signed-off-by,valueonly,separator=%x0A)' "$sha")
+            if grep -qiF "<$email>" <<<"$signoffs"; then
+              echo "ok      ${sha:0:12} $subject"
+            else
+              echo "::error::${sha:0:12} \"$subject\" has no Signed-off-by for its author <$email>"
+              missing=1
+            fi
+          done < <(git log --no-merges --format='%H%x09%ae%x09%s' "$BASE..$HEAD")
+          if [ "$missing" -ne 0 ]; then
+            echo "Sign off with 'git commit -s' (amend: 'git rebase --signoff $BASE'). See CONTRIBUTING.md."
+            exit 1
+          fi

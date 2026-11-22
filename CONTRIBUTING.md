@@ -55,6 +55,41 @@ SWIFTC=/path/to/swift.org/usr/bin/swiftc ci/check-link.sh
 swift package generate-documentation --target CapnpRuntime
 ```
 
+## Sign Your Work (DCO)
+
+Every commit in a pull request must be signed off under the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/). The sign-off
+certifies that you wrote the change, or otherwise have the right to submit it under this
+project's MIT license. Sign off with `git commit -s`, which adds:
+
+```text
+Signed-off-by: Your Name <you@example.com>
+```
+
+The email must match the commit author. The required `DCO` check enforces this. To sign
+off commits you already made, run `git rebase --signoff origin/main` and force-push your
+branch. There is no CLA.
+
+## AI-Assisted Contributions
+
+AI coding assistants are welcome here. The maintainer uses them too: maintainer commits
+written with an agent carry a `Co-Authored-By:` trailer naming the model. The rules:
+
+- **A human is responsible for every PR.** You must have read and understood every line
+  you submit, and be able to explain and defend it in review. Unreviewed agent output
+  will be closed.
+- **The sign-off is yours.** Only a person can certify the DCO. Never add a
+  `Signed-off-by:` for an AI tool, and do not let an agent sign off for you on code you
+  have not reviewed.
+- **Disclose material assistance.** Say in the PR description which parts an AI tool wrote
+  or substantially shaped. A `Co-Authored-By:` or `Assisted-by:` trailer is welcome. You
+  don't need to mention autocomplete-level help.
+- **The same bar applies.** AI-written code passes the same gates (`-no-allocations`, zero
+  `unsafe`, compile-fail contracts, tests) and gets the same review. Generated tests must
+  test real behavior, not mirror the implementation.
+- **Mind provenance.** Do not submit output you have reason to believe reproduces code
+  under an incompatible license.
+
 ## Pull Requests
 
 - Keep PRs focused and include tests for new behavior or bug fixes.
