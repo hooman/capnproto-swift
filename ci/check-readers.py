@@ -55,7 +55,8 @@ run([capnp, 'compile', '-o', f'{plugin}:{work}', f'--src-prefix={fixture}', fixt
 assert generated.read_bytes() == first
 # Output for an existing schema stays byte-identical to the committed golden file. Regenerate
 # it deliberately, in the same commit as the generator change that alters it.
-assert first == (fixture / 'golden/readers.capnp.swift').read_bytes(), 'golden output changed'
+# (`.expected`, not `.swift`: generated code is not held to swift-format.)
+assert first == (fixture / 'golden/readers.capnp.swift.expected').read_bytes(), 'golden output changed'
 
 host_target = run([swiftc, '-print-target-info']).decode()
 import json
@@ -270,11 +271,12 @@ annotated.mkdir(exist_ok=True)
 run([capnp, 'compile', '-o', f'{plugin}:{annotated}', f'--src-prefix={fixture}',
      fixture / 'annotated-import.capnp', fixture / 'annotated.capnp'])
 for name in ['annotated-import.capnp.swift', 'annotated.capnp.swift']:
-    assert (annotated / name).read_bytes() == (fixture / 'golden' / name).read_bytes(), name
+    assert (annotated / name).read_bytes() == (fixture / 'golden' / f'{name}.expected').read_bytes(), name
 message = run([capnp, 'encode', fixture / 'annotated.capnp', 'Box'],
               data=b'(value = 9, thing = (id = 42), choice = (count = 3), extra = (flag = true))')
 (annotated / 'box.bin').write_bytes(message)
-run([swiftc, *flags, *link_flags, '-O', '-I', host, annotated / 'annotated-import.capnp.swift',
+run([swiftc, *flags, *link_flags, '-O', '-parse-as-library', '-I', host,
+     annotated / 'annotated-import.capnp.swift',
      annotated / 'annotated.capnp.swift', fixture / 'annotated-verify.swift', host / 'runtime.o',
      '-o', annotated / 'verify'])
 print(run([annotated / 'verify', annotated / 'box.bin']).decode().strip(), flush=True)

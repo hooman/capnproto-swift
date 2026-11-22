@@ -53,10 +53,9 @@ enum RequestDecoder {
         return SchemaRequest(nodes: nodes, files: files)
     }
 
+    // Annotations (Node pointer 2, Field pointer 1) are never read: they carry no wire
+    // meaning, and rejecting them failed any request that imported /capnp/c++.capnp (D-17).
     static func node(_ reader: borrowing StructReader) throws -> SchemaNode {
-        guard reader.pointerField(at: 2).list(of: .inlineComposite).count == 0 else {
-            throw CompilerFailure("annotations are outside readers-only v1")
-        }
         let kind = reader.data(at: 6, default: UInt16(0))
         var nested: [(UInt64, String)] = []
         let children = reader.pointerField(at: 1).list(of: .inlineComposite)
@@ -85,9 +84,6 @@ enum RequestDecoder {
     }
 
     static func field(_ reader: borrowing StructReader) throws -> SchemaField {
-        guard reader.pointerField(at: 1).list(of: .inlineComposite).count == 0 else {
-            throw CompilerFailure("field annotations are outside readers-only v1")
-        }
         let name = string(reader.pointerField(at: 0).text())
         let discriminant = reader.data(at: 1, default: UInt16.max)
         let kind = reader.data(at: 4, default: UInt16(0))

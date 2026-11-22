@@ -40,8 +40,7 @@ struct SwiftGenerator {
                 "public import CapnpRuntime", "", availability,
                 "public enum Capnp_\(String(file.id, radix: 16)) {",
             ]
-            let children = children(of: file.id)
-            for node in children {
+            for node in children(of: file.id) {
                 guard node.kind == 1 else {
                     throw CompilerFailure(
                         "unsupported declaration kind \(node.kind) in \(file.filename)")
@@ -54,8 +53,10 @@ struct SwiftGenerator {
         return output
     }
 
+    // Annotation declarations (kind 5) generate nothing; every other kind is rendered or
+    // diagnosed by the caller.
     private func children(of id: UInt64) -> [SchemaNode] {
-        request.nodes.values.filter { $0.scope == id }.sorted { $0.id < $1.id }
+        request.nodes.values.filter { $0.scope == id && $0.kind != 5 }.sorted { $0.id < $1.id }
     }
 
     // Quote every accepted name so Swift keywords need no evolving special-case list.
