@@ -219,18 +219,25 @@ assert (outside_dir / 'real.swift').read_text() == 'sentinel\n'
 
 # Multi-file write failure: file #1 would be newly created, file #2 hits a read-only parent dir.
 # File #1 must be rolled back so no partial newly created output remains.
-ro_dir = out_dir / 'readonly'
-ro_dir.mkdir()
-ro_dir.chmod(0o555)
-try:
-    run_in(out_dir, [plugin],
-           data=make_code_generator_request(['first.capnp', 'readonly/second.capnp']),
-           reject=r'capnpc-swift:')
-    assert not (out_dir / 'first.capnp.swift').exists(), 'partial newly-created file left behind'
-    assert not (ro_dir / 'second.capnp.swift').exists()
-finally:
-    ro_dir.chmod(0o755)
-print('PASS: output-boundary hardening (lexical, symlink parent/leaf, collision, rollback)', flush=True)
+# Root ignores directory permission bits (e.g. GitHub container jobs), so the write cannot be
+# made to fail this way there; non-root runs (macOS CI, local) still cover the rollback.
+if os.geteuid() == 0:
+    print('SKIP: multi-file rollback (root ignores read-only directories)', flush=True)
+    print('PASS: output-boundary hardening (lexical, symlink parent/leaf, collision)', flush=True)
+else:
+    ro_dir = out_dir / 'readonly'
+    ro_dir.mkdir()
+    ro_dir.chmod(0o555)
+    try:
+        run_in(out_dir, [plugin],
+               data=make_code_generator_request(['first.capnp', 'readonly/second.capnp']),
+               reject=r'capnpc-swift:')
+        assert not (out_dir / 'first.capnp.swift').exists(), 'partial newly-created file left behind'
+        assert not (ro_dir / 'second.capnp.swift').exists()
+    finally:
+        ro_dir.chmod(0o755)
+    print('PASS: output-boundary hardening (lexical, symlink parent/leaf, collision, rollback)',
+          flush=True)
 
 # A large real compiler request must exercise multi-segment bootstrap decoding.
 large = work / 'large.capnp'
