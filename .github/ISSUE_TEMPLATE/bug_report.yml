@@ -1,0 +1,51 @@
+name: Bug report
+description: Wrong decoding, a crash, a build or codegen failure, or an Embedded-clean regression.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security issues (out-of-bounds reads, overflows, budget bypasses, output-path escapes)
+        go to a **private advisory**, not here — see SECURITY.md.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - CapnpRuntime (reading messages)
+        - capnpc-swift (code generator)
+        - CapnpGeneratorPlugin (SwiftPM plugin)
+        - Embedded / cross-target build
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include `Arena.error` after traversal if this is a read problem.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Schema, message bytes (hex), and the Swift code that reads them, or the failing build command.
+      render: swift
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: capnproto-swift commit or version
+      placeholder: e.g. 1e86f34 or 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: toolchain
+    attributes:
+      label: Toolchain and target
+      description: Output of `swift --version`, the target triple, and whether this is an Embedded build. Include `capnp --version` for codegen issues.
+      render: text
+    validations:
+      required: true

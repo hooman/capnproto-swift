@@ -1,0 +1,22 @@
+name: Feature or scope request
+description: Propose a capability or a change in scope (v1 is readers-only, synchronous, and ~Sendable).
+labels: [enhancement]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What are you trying to do, and on which targets (host, Embedded, Wasm, ...)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should the API or behavior look like? Note any effect on the allocation-free / Embedded-clean guarantees.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

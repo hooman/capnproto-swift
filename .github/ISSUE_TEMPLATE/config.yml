@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/hooman/capnproto-swift/security/advisories/new
+    about: Report vulnerabilities privately (see SECURITY.md). Do not open a public issue.
+  - name: Cap'n Proto format and schema questions
+    url: https://capnproto.org/language.html
+    about: Questions about the Cap'n Proto format or schema language itself, not this implementation.
