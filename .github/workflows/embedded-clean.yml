@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Formatting (swift format against the committed .swift-format)
         run: swift format lint --strict --parallel --recursive Package.swift Sources Tests Plugins ci
-      - run: apt-get update && apt-get install -y capnproto python3
+      - run: apt-get update && apt-get install -y capnproto libcapnp-dev python3
       - run: swift test
       - run: swift test -c release
       - run: SWIFTC=/usr/bin/swiftc TARGET=x86_64-unknown-linux-gnu bash ci/check-embedded-clean.sh
@@ -142,7 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: swift --version
-      - run: apt-get update && apt-get install -y capnproto python3
+      - run: apt-get update && apt-get install -y capnproto libcapnp-dev python3
       - run: swift test
       - run: SWIFTC="$(command -v swiftc)" TARGET=armv7em-none-none-eabi bash ci/check-embedded-clean.sh
       - run: python3 ci/check-readers.py --plugin .build/debug/capnpc-swift --work /tmp/readers --skip-compile-fail
