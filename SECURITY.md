@@ -18,8 +18,8 @@
 
 ## Supported Versions
 
-No release is tagged yet; fixes land on `main`. Consumers should pin a commit revision
-and update when security fixes are published.
+Security fixes land on `main` and ship in a new patch release of the latest minor version
+(currently `0.1.x`). Earlier minor versions are not maintained while the version is `0.x`.
 
 ## Reporting a Vulnerability
 

@@ -62,3 +62,14 @@ swift package generate-documentation --target CapnpRuntime
   when changing public behavior or supported-target evidence.
 - Only claim platform support that has been verified with automated positive and negative
   controls.
+
+## Changelog and releases
+
+- Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for any user-visible
+  change.
+- Maintainers cut releases with the `release` workflow
+  (`gh workflow run release.yml -f version=X.Y.Z`) after renaming `[Unreleased]` to
+  `## [X.Y.Z] - YYYY-MM-DD`. The workflow runs the full CI gates on that commit, creates the
+  tag and GitHub Release, and attaches a source archive with a build-provenance attestation
+  (`gh attestation verify capnproto-swift-X.Y.Z.tar.gz -R hooman/capnproto-swift`).
+  Release tags are immutable; fix a bad release with a new patch release.
