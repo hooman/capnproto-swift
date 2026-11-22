@@ -217,27 +217,27 @@ for escaped_name in [
 assert sorted(p.name for p in outside_dir.iterdir()) == ['real.swift']
 assert (outside_dir / 'real.swift').read_text() == 'sentinel\n'
 
-# Multi-file write failure: file #1 would be newly created, file #2 hits a read-only parent dir.
-# File #1 must be rolled back so no partial newly created output remains.
-# Root ignores directory permission bits (e.g. GitHub container jobs), so the write cannot be
-# made to fail this way there; non-root runs (macOS CI, local) still cover the rollback.
-if os.geteuid() == 0:
-    print('SKIP: multi-file rollback (root ignores read-only directories)', flush=True)
-    print('PASS: output-boundary hardening (lexical, symlink parent/leaf, collision)', flush=True)
-else:
-    ro_dir = out_dir / 'readonly'
-    ro_dir.mkdir()
-    ro_dir.chmod(0o555)
-    try:
-        run_in(out_dir, [plugin],
-               data=make_code_generator_request(['first.capnp', 'readonly/second.capnp']),
-               reject=r'capnpc-swift:')
-        assert not (out_dir / 'first.capnp.swift').exists(), 'partial newly-created file left behind'
-        assert not (ro_dir / 'second.capnp.swift').exists()
-    finally:
-        ro_dir.chmod(0o755)
-    print('PASS: output-boundary hardening (lexical, symlink parent/leaf, collision, rollback)',
-          flush=True)
+# Multi-file write failure: file #1 is newly created, then writing file #2 fails. File #1 must be
+# rolled back so no partial newly created output remains. The failure must also happen as root
+# (GitHub container jobs run as root and ignore directory permission bits), so file #2's leaf
+# name exceeds NAME_MAX (255 bytes): the write rejects it as an invalid file name for every user.
+# Preflight does not check name length, so the failure comes from the write itself.
+long_name = 'x' * 250 + '.capnp'
+assert len((long_name + '.swift').encode()) > 255
+before = sorted(os.listdir(out_dir))
+result = subprocess.run([plugin], input=make_code_generator_request(['first.capnp', long_name]),
+                        capture_output=True, cwd=out_dir)
+stderr = result.stderr.decode()
+assert result.returncode != 0, 'Unexpected success: over-long output name was written'
+assert re.search(r'capnpc-swift:', stderr), stderr
+assert not re.search(r'unsafe output filename|duplicate output path|escape|symbolic link|'
+                     r'existing directory|not a directory', stderr, re.I), \
+    f'failed in preflight, not while writing: {stderr}'
+# Listing the directory avoids stat on the over-long name; it also catches stray temp files.
+assert sorted(os.listdir(out_dir)) == before, \
+    f'partial output left behind: {sorted(set(os.listdir(out_dir)) - set(before))}'
+print('PASS: output-boundary hardening (lexical, symlink parent/leaf, collision, rollback)',
+      flush=True)
 
 # A large real compiler request must exercise multi-segment bootstrap decoding.
 large = work / 'large.capnp'
