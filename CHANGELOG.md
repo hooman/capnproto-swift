@@ -17,6 +17,12 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   annotations, now generates readers instead of failing with `annotations are outside
   readers-only v1`. Annotation declarations generate no Swift.
 
+### Fixed
+
+- `capnpc-swift` failed with `invalid CodeGeneratorRequest: typeMismatch` on a non-empty
+  list default whose element type is unsupported, such as `List(MyEnum) = [a, b]`. It now
+  reports the unsupported default.
+
 ## [0.1.0] - 2026-11-21
 
 First public release: readers-only, synchronous v1.

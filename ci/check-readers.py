@@ -295,6 +295,13 @@ run([capnp, 'compile', '-o', plugin, 'uses-plain.capnp'])
     'struct Box { service @0 :S.Service; }')
 run([capnp, 'compile', '-o', plugin, 'uses-service.capnp'], reject=r'capnpc-swift:.*unsupported')
 assert not (work / 'uses-service.capnp.swift').exists()
+# A non-empty list default whose element type is unsupported (an enum's two-byte list) is
+# diagnosed, not misread as a pointer list (which failed with typeMismatch).
+(work / 'color.capnp').write_text('@0xa11071a7ed000007; enum Color { red @0; green @1; }')
+(work / 'enum-list-default.capnp').write_text('@0xa11071a7ed000008; using C = import "color.capnp"; '
+    'struct Box { colors @0 :List(C.Color) = [red, green]; }')
+run([capnp, 'compile', '-o', plugin, 'enum-list-default.capnp'],
+    reject=r'capnpc-swift:.*unsupported non-empty pointer default')
 print('PASS: annotations tolerated, golden output, c++.capnp import, interface diagnostics', flush=True)
 
 

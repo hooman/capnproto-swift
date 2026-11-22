@@ -121,8 +121,14 @@ enum RequestDecoder {
             guard value.data(at: 0, default: UInt16(0)) == 14 else {
                 throw CompilerFailure("default type mismatch for \(name)")
             }
-            let size = elementSize(element)
-            unsupportedDefault = value.pointerField(at: 0).list(of: size).count != 0
+            // An unsupported element type has no trustworthy wire size here (an enum list is
+            // two-byte, not pointer), so any non-null default is diagnosed unopened.
+            if case .unsupported = element {
+                unsupportedDefault = !value.pointerField(at: 0).isNull
+            } else {
+                let size = elementSize(element)
+                unsupportedDefault = value.pointerField(at: 0).list(of: size).count != 0
+            }
             expression = ""
         case .structure:
             guard value.data(at: 0, default: UInt16(0)) == 16 else {
