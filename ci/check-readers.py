@@ -220,8 +220,8 @@ assert (outside_dir / 'real.swift').read_text() == 'sentinel\n'
 # Multi-file write failure: file #1 is newly created, then writing file #2 fails. File #1 must be
 # rolled back so no partial newly created output remains. The failure must also happen as root
 # (GitHub container jobs run as root and ignore directory permission bits), so file #2's leaf
-# name exceeds NAME_MAX: the kernel rejects it with ENAMETOOLONG for every user. Preflight does
-# not check name length, so the failure comes from the write itself.
+# name exceeds NAME_MAX (255 bytes): the write rejects it as an invalid file name for every user.
+# Preflight does not check name length, so the failure comes from the write itself.
 long_name = 'x' * 250 + '.capnp'
 assert len((long_name + '.swift').encode()) > 255
 before = sorted(os.listdir(out_dir))
