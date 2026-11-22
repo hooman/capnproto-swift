@@ -72,9 +72,9 @@ public struct Arena: ~Copyable, ~Escapable, ~Sendable {
     @_lifetime(copy bytes)
     public init(
         bytes: RawSpan,
-        traversalLimitWords: UInt64 = Wire.traversalLimitWords,
+        traversalLimitWords: UInt64 = ReaderOptions.defaultTraversalLimitWords,
         segmentID: UInt32 = 0,
-        nestingLimit: Int = Wire.nestingLimit
+        nestingLimit: Int = ReaderOptions.defaultNestingLimit
     ) {
         self.bytes = bytes
         self.segmentID = segmentID
@@ -98,7 +98,7 @@ public struct Arena: ~Copyable, ~Escapable, ~Sendable {
 
     /// Reserve additional traversal work; failure records `.traversalLimit`.
     @discardableResult
-    public borrowing func charge(words: UInt64) -> Bool { state.charge(words) }
+    borrowing func charge(words: UInt64) -> Bool { state.charge(words) }
 
     /// Borrow the root and shared accounting state for the closure. Check `error` afterward,
     /// even when the closure returns normally: invalid reads return empty/default values.

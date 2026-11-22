@@ -6,9 +6,16 @@ public struct ReaderOptions {
     public var nestingLimit: Int
     public var segmentLimit: UInt32
 
+    // Policy defaults, not wire limits. Traversal bounds repeated work and nesting
+    // bounds logical descent, including inline struct elements reached through lists.
+    /// Default traversal/read limit: 64 MiB = 8 Mi-words. Counts words down.
+    public static var defaultTraversalLimitWords: UInt64 { 8 * 1024 * 1024 }
+    /// Default logical nesting depth (stack-overflow guard).
+    public static var defaultNestingLimit: Int { 64 }
+
     public init(
-        traversalLimitWords: UInt64 = Wire.traversalLimitWords,
-        nestingLimit: Int = Wire.nestingLimit,
+        traversalLimitWords: UInt64 = ReaderOptions.defaultTraversalLimitWords,
+        nestingLimit: Int = ReaderOptions.defaultNestingLimit,
         segmentLimit: UInt32 = 512
     ) {
         self.traversalLimitWords = traversalLimitWords

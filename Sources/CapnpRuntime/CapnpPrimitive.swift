@@ -8,6 +8,13 @@
 
 /// A data-section scalar whose wire bits can be loaded little-endian and XOR-unmasked
 /// against its schema default.
+///
+/// `CapnpRuntime` provides the conformances for every Cap'n Proto scalar type
+/// (`Bool`, fixed-width integers, `Float`, `Double`). The protocol is public so
+/// generated code can name it as a generic constraint (for example
+/// `PrimitiveList<UInt16>`); it is **not** an extension point. Conformances declared
+/// outside `CapnpRuntime` are unsupported, and its requirements may change in a minor
+/// release.
 public protocol CapnpPrimitive {
     /// Positive bit width used for field addressing and bounds checks (Bool uses one bit).
     static var sizeInBits: Int { get }

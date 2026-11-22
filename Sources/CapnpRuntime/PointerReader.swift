@@ -112,9 +112,13 @@ public struct PointerReader: ~Escapable, ~Sendable {
         return ResolvedPointer(pointer: pointer, segmentID: id, targetByte: Int(target))
     }
 
-    /// Open a struct; only nil or a null default pointer is supported in v1.
+    /// Open a struct. A null pointer reads as the empty struct (schema defaults).
     @_lifetime(copy self)
-    public func structure(default defaultPointer: RawPointer? = nil) -> StructReader {
+    public func structure() -> StructReader { structure(default: nil) }
+
+    /// Open a struct with a schema default pointer; only a null default is supported in v1.
+    @_lifetime(copy self)
+    func structure(default defaultPointer: RawPointer?) -> StructReader {
         let empty = StructReader(context: context)
         if let d = defaultPointer, !d.isNull {
             context.report(.unsupportedDefault)

@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 
-CONTRACT_DIRS = ('controls', 'lifetimes', 'ownership', 'concurrency', 'safety')
+CONTRACT_DIRS = ('controls', 'lifetimes', 'ownership', 'concurrency', 'safety', 'api')
 TRIPWIRE_DIRS = ('tripwires',)
 ALL_DIRS = CONTRACT_DIRS + TRIPWIRE_DIRS
 

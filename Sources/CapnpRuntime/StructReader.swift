@@ -40,7 +40,7 @@ public struct StructReader: ~Escapable, ~Sendable {
             atBitOffset: dataStartByte * 8 + offset * width, default: value)
     }
 
-    public func pointer(at index: Int) -> RawPointer {
+    func pointer(at index: Int) -> RawPointer {
         guard index >= 0, index < ptrCount else { return RawPointer(0) }
         return context.word(at: ptrStartByte + index * 8)
     }

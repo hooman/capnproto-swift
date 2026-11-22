@@ -41,7 +41,7 @@ struct ResolverTests {
             }
             #expect(arena.error == .none)
             #expect(arena.consumedByteCount == 24)
-            #expect(arena.remainingTraversalWords == Wire.traversalLimitWords - 1)
+            #expect(arena.remainingTraversalWords == ReaderOptions.defaultTraversalLimitWords - 1)
         }
     }
 
@@ -55,7 +55,9 @@ struct ResolverTests {
             let arena = Arena(framedBytes: RawSpan(_unsafeBytes: bytes))
             arena.withRoot { root in #expect(root.data(at: 0, default: UInt64(0)) == 99) }
             #expect(arena.error == .none)
-            #expect(arena.remainingTraversalWords == Wire.traversalLimitWords - (double ? 3 : 2))
+            #expect(
+                arena.remainingTraversalWords == ReaderOptions.defaultTraversalLimitWords
+                    - (double ? 3 : 2))
         }
     }
 

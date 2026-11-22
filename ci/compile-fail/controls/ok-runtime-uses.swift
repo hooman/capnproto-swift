@@ -19,11 +19,10 @@ private func useRuntime(_ framed: [UInt8], _ raw: RawSpan) -> UInt64 {
     let options = ReaderOptions(traversalLimitWords: 1024, nestingLimit: 16, segmentLimit: 8)
     let arena = Arena(framedBytes: framed.span.bytes, options: options)
     var total = UInt64(arena.consumedByteCount) &+ arena.remainingTraversalWords
-    _ = arena.charge(words: 1)
 
     let fromRoot = arena.withRoot { root -> UInt64 in
         var sum = root.data(at: 0, default: UInt64(0))
-        if root.pointer(at: 0).isNull { sum &+= 1 }
+        if root.pointerField(at: 0).isNull { sum &+= 1 }
         let copied = forwardView(root)
         let member = copied.unionMember(at: 0, equals: 1)
         let ptr = member.pointerField(at: 0)

@@ -41,19 +41,18 @@ and what's deliberately out of scope.
 - ``TextReader``
 - ``DataReader``
 
-### Protocols and codegen conformances
+### Generated-code support
+
+These are public because generated readers live in your module and call them. They are
+source-stable within a minor release, but they are not designed as a hand-written API.
+Read messages through generated readers where you can.
 
 - ``CapnpStructReader``
 - ``CapnpListElement``
 - ``CapnpPrimitive``
+- ``ElementSize``
 
 ### Limits and errors
 
 - ``ReaderOptions``
 - ``ReadError``
-- ``ElementSize``
-
-### Wire format
-
-- ``RawPointer``
-- ``Wire``

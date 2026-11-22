@@ -131,8 +131,6 @@ func verify32BitEdges() -> Int {
         let clamped = Arena(
             framedBytes: span, options: ReaderOptions(traversalLimitWords: UInt64.max))
         precondition(clamped.remainingTraversalWords == maxU32, "32-bit budget clamp failed")
-        precondition(clamped.charge(words: maxU32 &+ 1) == false, "huge charge must fail")
-        precondition(clamped.error == .traversalLimit, "huge charge must set traversalLimit")
 
         let normal = Arena(framedBytes: span, options: ReaderOptions(traversalLimitWords: 10))
         normal.withRoot { root in
