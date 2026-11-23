@@ -148,10 +148,13 @@ defaults. Named union/group fields return a reader over the parent layout.
 - Scalar XOR defaults, empty pointer defaults, missing-field defaults, compatible
   primitive/pointer-list and struct-list schema evolution. Boolean lists cannot
   upgrade to struct lists.
+- Annotations are accepted and ignored, including `$Cxx.namespace` from
+  `/capnp/c++.capnp`; annotation declarations generate nothing.
 - One Embedded-clean generated API for host and embedded use.
 
-The generator diagnoses enums, interfaces, constants, annotations, generics,
-AnyPointer, and non-empty pointer defaults. No builders, RPC, packed-stream decoder,
+The generator diagnoses enums, interfaces, constants, generics, AnyPointer, and
+non-empty pointer defaults in the files it generates. An unused interface in an imported
+file does not block generation. No builders, RPC, packed-stream decoder,
 public async API, or Sendable arena is provided. Apple targets require OS 27 (macOS,
 iOS, watchOS, tvOS, visionOS), where SE-0525's safe `RawSpan` loads are available.
 Non-Apple targets have no OS availability gate.

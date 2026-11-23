@@ -53,6 +53,10 @@ assert generated.is_file()
 first = generated.read_bytes()
 run([capnp, 'compile', '-o', f'{plugin}:{work}', f'--src-prefix={fixture}', fixture / 'readers.capnp'])
 assert generated.read_bytes() == first
+# Output for an existing schema stays byte-identical to the committed golden file. Regenerate
+# it deliberately, in the same commit as the generator change that alters it.
+# (`.expected`, not `.swift`: generated code is not held to swift-format.)
+assert first == (fixture / 'golden/readers.capnp.swift.expected').read_bytes(), 'golden output changed'
 
 host_target = run([swiftc, '-print-target-info']).decode()
 import json
@@ -118,7 +122,7 @@ unsupported = {
     'text-default': 'struct Box { value @0 :Text = "no"; }',
     'list-default': 'struct Box { value @0 :List(UInt32) = [1]; }',
     'struct-default': 'struct Box { value @0 :Inner = (value = 1); struct Inner { value @0 :UInt32; } }',
-    'annotation': 'annotation note(struct) :Void; struct Box $note {}',
+    'interface-field': 'interface Service {} struct Box { value @0 :Service; }',
 }
 for name, schema in unsupported.items():
     path = work / f'{name}.capnp'
@@ -258,6 +262,72 @@ print(f'PASS: bootstrap request with {segment_count} segments', flush=True)
 run([capnp, 'compile', '-o', plugin, 'imported.capnp', 'imports.capnp'])
 run([swiftc, *flags, '-I', host, '-typecheck', work / 'imported.capnp.swift', work / 'imports.capnp.swift'])
 print('PASS: imports, recursive references, Swift keywords', flush=True)
+
+# D-17 item 0: annotation uses are skipped and annotation declarations generate nothing.
+# Output must equal the committed golden files, which came from an unannotated twin with the
+# same node IDs, and the readers must decode a C++-encoded message.
+annotated = work / 'annotated'
+annotated.mkdir(exist_ok=True)
+run([capnp, 'compile', '-o', f'{plugin}:{annotated}', f'--src-prefix={fixture}',
+     fixture / 'annotated-import.capnp', fixture / 'annotated.capnp'])
+for name in ['annotated-import.capnp.swift', 'annotated.capnp.swift']:
+    assert (annotated / name).read_bytes() == (fixture / 'golden' / f'{name}.expected').read_bytes(), name
+message = run([capnp, 'encode', fixture / 'annotated.capnp', 'Box'],
+              data=b'(value = 9, thing = (id = 42), choice = (count = 3), extra = (flag = true))')
+(annotated / 'box.bin').write_bytes(message)
+run([swiftc, *flags, *link_flags, '-O', '-parse-as-library', '-I', host,
+     annotated / 'annotated-import.capnp.swift',
+     annotated / 'annotated.capnp.swift', fixture / 'annotated-verify.swift', host / 'runtime.o',
+     '-o', annotated / 'verify'])
+print(run([annotated / 'verify', annotated / 'box.bin']).decode().strip(), flush=True)
+# The real upstream import, as in most real-world schemas.
+(work / 'cxx.capnp').write_text('@0xa11071a7ed000003; using Cxx = import "/capnp/c++.capnp"; '
+    '$Cxx.namespace("demo"); struct Point $Cxx.name("Pt") { x @0 :Int32 $Cxx.name("ex"); }')
+run([capnp, 'compile', '-o', plugin, 'cxx.capnp'])
+run([swiftc, *flags, '-I', host, '-typecheck', work / 'cxx.capnp.swift'])
+# Fields that use the schemas upstream installs. capnp only puts an import's nodes in the
+# request when something uses it, so an unused import would prove nothing. These files hold
+# annotations, interfaces, generics, enums, constants and implicit method structs.
+# (persistent.capnp offers only generic types, which a field cannot reference yet.)
+(work / 'upstream.capnp').write_text('''@0xa11071a7ed000009;
+using Cxx = import "/capnp/c++.capnp";
+using Schema = import "/capnp/schema.capnp";
+using Rpc = import "/capnp/rpc.capnp";
+using TwoParty = import "/capnp/rpc-twoparty.capnp";
+using Stream = import "/capnp/stream.capnp";
+using Json = import "/capnp/compat/json.capnp";
+$Cxx.namespace("probe");
+struct Uses {
+  node @0 :Schema.Node;
+  message @1 :Rpc.Message;
+  vat @2 :TwoParty.VatId;
+  stream @3 :Stream.StreamResult;
+  json @4 :Json.Value;
+}
+''')
+request = run([capnp, 'compile', '-o-', 'upstream.capnp'])
+assert len(request) > 64 * 1024, 'upstream imports no longer reach the request'
+run([plugin], data=request)
+# Not typechecked: it names readers for upstream files that cannot be generated yet (enums).
+assert (work / 'upstream.capnp.swift').is_file()
+# An unused interface in an imported file does not block generation; a field that uses one does.
+(work / 'service.capnp').write_text('@0xa11071a7ed000004; interface Service {} '
+    'annotation note(*) :Void; struct Plain { id @0 :UInt64; }')
+(work / 'uses-plain.capnp').write_text('@0xa11071a7ed000005; using S = import "service.capnp"; '
+    'struct Box $S.note { plain @0 :S.Plain $S.note; }')
+run([capnp, 'compile', '-o', plugin, 'uses-plain.capnp'])
+(work / 'uses-service.capnp').write_text('@0xa11071a7ed000006; using S = import "service.capnp"; '
+    'struct Box { service @0 :S.Service; }')
+run([capnp, 'compile', '-o', plugin, 'uses-service.capnp'], reject=r'capnpc-swift:.*unsupported')
+assert not (work / 'uses-service.capnp.swift').exists()
+# A non-empty list default whose element type is unsupported (an enum's two-byte list) is
+# diagnosed, not misread as a pointer list (which failed with typeMismatch).
+(work / 'color.capnp').write_text('@0xa11071a7ed000007; enum Color { red @0; green @1; }')
+(work / 'enum-list-default.capnp').write_text('@0xa11071a7ed000008; using C = import "color.capnp"; '
+    'struct Box { colors @0 :List(C.Color) = [red, green]; }')
+run([capnp, 'compile', '-o', plugin, 'enum-list-default.capnp'],
+    reject=r'capnpc-swift:.*unsupported non-empty pointer default')
+print('PASS: annotations tolerated, golden output, upstream imports, interface diagnostics', flush=True)
 
 
 if not args.host_only:
