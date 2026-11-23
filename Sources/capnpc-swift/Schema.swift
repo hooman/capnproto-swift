@@ -32,12 +32,14 @@ indirect enum FieldType {
     case scalar(Scalar)
     case text, data
     case structure(UInt64)
+    case enumeration(UInt64)
     case list(FieldType)
     case unsupported(UInt16)
     var encoding: String {
         switch self {
         case .scalar(let scalar): return scalar.encoding
         case .structure: return "inlineComposite"
+        case .enumeration: return "twoBytes"
         default: return "pointer"
         }
     }
@@ -54,6 +56,11 @@ struct SchemaField {
     var doc: String? = nil
 }
 
+struct SchemaEnumerant {
+    let name: String
+    var doc: String? = nil
+}
+
 struct SchemaNode {
     let id: UInt64
     let scope: UInt64
@@ -66,10 +73,13 @@ struct SchemaNode {
     let discriminantOffset: Int
     let dataWords: UInt16
     let pointerCount: UInt16
+    // Enum nodes (kind 2) only, in ordinal order: an enumerant's ordinal is its index.
+    var enumerants: [SchemaEnumerant] = []
     var doc: String? = nil
-    // Set when sourceInfo lists a different number of members than the struct has fields;
-    // the member docs are dropped and the generator warns if it renders this node.
-    var memberDocMismatch: (members: Int, fields: Int)? = nil
+    // Set when sourceInfo lists a different number of members than the struct has fields or
+    // the enum has enumerants; member docs are dropped and the generator warns if it renders
+    // this node.
+    var memberDocMismatch: (members: Int, expected: Int)? = nil
 }
 
 struct RequestedFile {
