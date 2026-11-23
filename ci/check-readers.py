@@ -374,15 +374,11 @@ docs_text = run([capnp, 'convert', 'binary:text', schema_capnp, 'CodeGeneratorRe
 
 source_info = docs_text.rindex(',', 0, docs_text.index('sourceInfo = ['))
 
-def without_entry(tail, entry_id):
-    # Remove one `( id = N, ... )` entry by matching its parentheses, skipping string contents.
-    # (capnp 1.0 prints fewer SourceInfo fields than 1.5, so no regex on a field name.)
-    marker = f'( id = {entry_id},'
-    assert tail.count(marker) == 1, f'sourceInfo entry {entry_id} found {tail.count(marker)} times'
-    start = tail.index(marker)
+def entry_end(text, start):
+    # Index just past the `)` that closes the `(` at `start`, skipping string contents.
     depth, i, quoted = 0, start, False
     while True:
-        c = tail[i]
+        c = text[i]
         if quoted:
             if c == '\\':
                 i += 1
@@ -395,9 +391,16 @@ def without_entry(tail, entry_id):
         elif c == ')':
             depth -= 1
             if depth == 0:
-                break
+                return i + 1
         i += 1
-    end = re.match(r'\)\s*,?\s*', tail[i:]).end() + i
+
+def without_entry(tail, entry_id):
+    # Remove one `( id = N, ... )` entry by matching its parentheses.
+    # (capnp 1.0 prints fewer SourceInfo fields than 1.5, so no regex on a field name.)
+    marker = f'( id = {entry_id},'
+    assert tail.count(marker) == 1, f'sourceInfo entry {entry_id} found {tail.count(marker)} times'
+    start = tail.index(marker)
+    end = re.match(r'\s*,?\s*', tail[entry_end(tail, start):]).end() + entry_end(tail, start)
     return tail[:start] + tail[end:]
 
 def edited_docs(name, edit):
@@ -434,6 +437,68 @@ assert {line.strip() for line in output.splitlines() if '///' in line} == \
     {'/// Active union tag, or nil for a tag unknown to this schema version.'}, output
 print('PASS: doc comments (golden, hostile text, missing and mismatched sourceInfo)', flush=True)
 
+
+# Per-declaration verdicts for upstream test.capnp (D-17 answer key). Each top-level
+# declaration is generated on its own: every other top-level node is re-scoped to a copy of
+# the file node that is not requested, so references still resolve but only the chosen
+# declaration is rendered. The verdict is `ok` or the generator's first diagnostic. The
+# request is edited as a decoded message tree (ci/capnp_message.py): capnp's text form prints
+# AnyPointer defaults as `<opaque pointer>` and cannot round-trip this request.
+sys.dont_write_bytecode = True   # keep ci/ free of __pycache__
+sys.path.insert(0, str(root / 'ci'))
+import copy
+import capnp_message
+
+# The codec must be faithful: a round-tripped request generates the same output.
+docs_request = run([capnp, 'compile', '-o-', f'--src-prefix={fixture}', fixture / 'docs.capnp'])
+round_trip = docs / 'round-trip'
+round_trip.mkdir()
+run_in(round_trip, [plugin], data=capnp_message.encode(capnp_message.decode(docs_request)))
+assert (round_trip / 'docs.capnp.swift').read_bytes() == (fixture / 'golden/docs.capnp.swift.expected').read_bytes()
+
+corpus = work / 'corpus'
+(corpus / 'testdata').mkdir(parents=True)
+upstream_test = (fixture / 'upstream/test.capnp').read_text(encoding='utf-8')
+cxx_import = 'using Cxx = import "c++.capnp";'
+assert upstream_test.count(cxx_import) == 1, 'vendored test.capnp changed its c++.capnp import'
+(corpus / 'test.capnp').write_text(upstream_test.replace(cxx_import, 'using Cxx = import "/capnp/c++.capnp";'),
+                                   encoding='utf-8')
+for name in ['packed', 'short.txt', 'binary']:
+    shutil.copyfile(fixture / 'upstream/testdata' / name, corpus / 'testdata' / name)
+tree = capnp_message.decode(run([capnp, 'compile', '-o-', f'--src-prefix={corpus}', corpus / 'test.capnp']))
+test_file_id, shadow_id = 0xd508eebdc2dc42b8, 0x5ad0000000000001
+nodes = tree.pointers[0]                       # CodeGeneratorRequest.nodes
+by_id = {node.u64(0): node for node in nodes.items}
+assert shadow_id not in by_id
+declarations = [(nested.pointers[0].raw.rstrip(b'\0').decode(), nested.u64(0))
+                for nested in by_id[test_file_id].pointers[1].items]   # Node.nestedNodes
+source_count = len(re.findall(r'^(?:struct|enum|interface|const|annotation) ', upstream_test, re.M))
+assert len(declarations) == source_count, f'{len(declarations)} nested nodes, {source_count} in source'
+shadow = copy.deepcopy(by_id[test_file_id])
+shadow.set_u64(0, shadow_id)
+nodes.items.append(shadow)
+nodes.count += 1
+top_level = [node for node in nodes.items if node.u64(2) == test_file_id]   # Node.scopeId
+assert len(top_level) == len(declarations)
+verdicts = []
+for index, (name, node_id) in enumerate(declarations):
+    for node in top_level:
+        node.set_u64(2, test_file_id if node.u64(0) == node_id else shadow_id)
+    out = corpus / 'out' / f'{index:02d}'   # by index: names can differ only in case
+    out.mkdir(parents=True)
+    result = subprocess.run([plugin], input=capnp_message.encode(tree), capture_output=True, cwd=out)
+    lines = result.stderr.decode().splitlines()
+    if result.returncode == 0:
+        assert not lines, f'{name}: {lines}'
+        verdicts.append(f'{name}: ok')
+    else:
+        assert lines and lines[0].startswith('capnpc-swift: '), f'{name}: {lines}'
+        verdicts.append(f'{name}: {lines[0][len("capnpc-swift: "):]}')
+(corpus / 'verdicts.txt').write_text('\n'.join(verdicts) + '\n')
+assert (corpus / 'verdicts.txt').read_bytes() == (fixture / 'golden/test-capnp-verdicts.expected').read_bytes(), \
+    f'test.capnp verdicts changed; see {corpus / "verdicts.txt"}'
+print(f'PASS: test.capnp verdicts ({len(verdicts)} declarations, '
+      f'{sum(v.endswith(": ok") for v in verdicts)} generate)', flush=True)
 
 if not args.host_only:
     embedded = work / 'embedded'

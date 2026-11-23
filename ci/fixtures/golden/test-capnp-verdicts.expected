@@ -1,0 +1,79 @@
+TestEnum: unsupported declaration kind 2 in test.capnp
+TestAllTypes: unsupported field type 15
+TestDefaults: duplicate field or unsupported non-empty pointer default: textField
+TestAnyPointer: unsupported field type 18
+TestAnyOthers: unsupported field type 18
+TestOutOfOrder: ok
+TestUnion: ok
+TestUnnamedUnion: ok
+TestUnionInUnion: ok
+TestGroups: ok
+TestInterleavedGroups: ok
+TestUnionDefaults: duplicate field or unsupported non-empty pointer default: s16s8s64s8Set
+TestNestedTypes: field offset exceeds struct pointer section: innerNestedEnum
+TestUsing: field offset exceeds struct pointer section: innerNestedEnum
+TestLists: ok
+TestFieldZeroIsBit: ok
+TestListDefaults: duplicate field or unsupported non-empty pointer default: lists
+TestLateUnion: ok
+TestOldVersion: ok
+TestNewVersion: duplicate field or unsupported non-empty pointer default: new2
+TestOldUnionVersion: ok
+TestNewUnionVersion: ok
+TestStructUnion: ok
+TestPrintInlineStructs: ok
+TestWholeFloatDefault: unsupported or excessively nested declaration 12848740249178797035
+TestGenerics: generic structs are outside readers-only v1
+BoxedText: ok
+TestGenericsWrapper: generic structs are outside readers-only v1
+TestGenericsWrapper2: referenced type 12228031604858979421 is not a supported nongeneric struct
+TestImplicitMethodParams: unsupported declaration kind 3 in test.capnp
+TestImplicitMethodParamsInGeneric: unsupported declaration kind 3 in test.capnp
+TestGenericsUnion: generic structs are outside readers-only v1
+TestUseGenerics: duplicate field or unsupported non-empty pointer default: default
+TestEmptyStruct: ok
+TestConstants: unsupported or excessively nested declaration 10060490489348360306
+globalInt: unsupported declaration kind 4 in test.capnp
+globalText: unsupported declaration kind 4 in test.capnp
+globalStruct: unsupported declaration kind 4 in test.capnp
+globalPrintableStruct: unsupported declaration kind 4 in test.capnp
+derivedConstant: unsupported declaration kind 4 in test.capnp
+genericConstant: unsupported declaration kind 4 in test.capnp
+embeddedData: unsupported declaration kind 4 in test.capnp
+embeddedText: unsupported declaration kind 4 in test.capnp
+embeddedStruct: unsupported declaration kind 4 in test.capnp
+nonAsciiText: unsupported declaration kind 4 in test.capnp
+blockText: unsupported declaration kind 4 in test.capnp
+TestAnyPointerConstants: unsupported field type 18
+anyPointerConstants: unsupported declaration kind 4 in test.capnp
+TestListOfAny: unsupported field type 18
+TestInterface: unsupported declaration kind 3 in test.capnp
+TestExtends: unsupported declaration kind 3 in test.capnp
+TestExtends2: unsupported declaration kind 3 in test.capnp
+TestPipeline: unsupported declaration kind 3 in test.capnp
+TestCallOrder: unsupported declaration kind 3 in test.capnp
+TestTailCallee: unsupported declaration kind 3 in test.capnp
+TestTailCaller: unsupported declaration kind 3 in test.capnp
+TestStreaming: unsupported declaration kind 3 in test.capnp
+TestHandle: unsupported declaration kind 3 in test.capnp
+TestMoreStuff: unsupported declaration kind 3 in test.capnp
+TestMembrane: unsupported declaration kind 3 in test.capnp
+TestContainMembrane: unsupported field type 17
+TestTransferCap: unsupported field type 17
+TestKeywordMethods: unsupported declaration kind 3 in test.capnp
+TestAuthenticatedBootstrap: unsupported declaration kind 3 in test.capnp
+TestSturdyRef: unsupported field type 18
+TestSturdyRefHostId: ok
+TestSturdyRefObjectId: field offset exceeds struct pointer section: tag
+TestProvisionId: ok
+TestRecipientId: ok
+TestThirdPartyCapId: ok
+TestJoinResult: ok
+TestNameAnnotation: field offset exceeds struct pointer section: anotherBadFieldName
+TestNameAnnotationInterface: unsupported declaration kind 3 in test.capnp
+TestImpliedFirstField: duplicate field or unsupported non-empty pointer default: textStruct
+testImpliedFirstField: unsupported declaration kind 4 in test.capnp
+TestCycleANoCaps: ok
+TestCycleBNoCaps: ok
+TestCycleAWithCaps: ok
+TestCycleBWithCaps: unsupported field type 17
