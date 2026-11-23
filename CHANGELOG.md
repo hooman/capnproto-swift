@@ -10,6 +10,14 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+### Added
+
+- `capnpc-swift` carries schema doc comments (`CodeGeneratorRequest.sourceInfo`) into
+  generated `///` comments on the file namespace, structs, groups and field accessors.
+  Comment text cannot escape its comment line: line breaks start a new `///` line, and
+  control characters and bidi overrides are removed. Schemas without doc comments
+  generate the same output as before.
+
 ### Changed
 
 - `capnpc-swift` accepts and ignores annotations. A schema that uses

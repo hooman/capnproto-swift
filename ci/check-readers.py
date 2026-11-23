@@ -307,7 +307,10 @@ struct Uses {
 ''')
 request = run([capnp, 'compile', '-o-', 'upstream.capnp'])
 assert len(request) > 64 * 1024, 'upstream imports no longer reach the request'
-run([plugin], data=request)
+upstream_run = subprocess.run([plugin], input=request, capture_output=True, cwd=work)
+assert upstream_run.returncode == 0, upstream_run.stderr.decode()
+# Upstream files document their enums and interfaces too; no rendered struct may warn.
+assert not upstream_run.stderr, upstream_run.stderr.decode()
 # Not typechecked: it names readers for upstream files that cannot be generated yet (enums).
 assert (work / 'upstream.capnp.swift').is_file()
 # An unused interface in an imported file does not block generation; a field that uses one does.
@@ -328,6 +331,108 @@ assert not (work / 'uses-service.capnp.swift').exists()
 run([capnp, 'compile', '-o', plugin, 'enum-list-default.capnp'],
     reject=r'capnpc-swift:.*unsupported non-empty pointer default')
 print('PASS: annotations tolerated, golden output, upstream imports, interface diagnostics', flush=True)
+
+# Doc comments (D-17 item 1). capnp copies comment bytes verbatim, so a hostile schema can put
+# line breaks, bidi controls, other control characters and invalid UTF-8 into sourceInfo. All of
+# it must stay inside `///` lines. The goldens were written by hand: main's output plus the
+# expected doc lines.
+docs = work / 'docs'
+docs_out = docs / 'out'
+docs_out.mkdir(parents=True)
+(docs / 'docs-hostile.capnp').write_bytes(
+    b'@0xd0c5000000000002;\n'
+    b'struct Hostile @0xd0c5000000000021 {\r\n'
+    b'  # CRLF line one.\r\n'
+    b'  # CRLF line two.\r\n'
+    b'  a @0 :Int32;  # cr:\rpublic var injected: Int { 0 }\n'
+    b'  b @1 :Int32;  # bidi:\xe2\x80\xaeevil\xe2\x81\xa6x\xe2\x81\xa9 ctl:\x01\x7f\xc2\x85 tab:\tend   \n'
+    b'  c @2 :Int32;  # bad utf8:\xff\xfe!\n'
+    b'  d @3 :Int32;  # */ /* and } code(); \n'
+    b'  e @4 :Int32;  #    \n'
+    b'  f @5 :Int32;  # \x1b[31mansi\n'
+    b'}\n')
+run([capnp, 'compile', '-o', f'{plugin}:{docs_out}', f'--src-prefix={fixture}', fixture / 'docs.capnp'])
+run([capnp, 'compile', '-o', f'{plugin}:{docs_out}', f'--src-prefix={docs}', docs / 'docs-hostile.capnp'])
+for name in ['docs.capnp.swift', 'docs-hostile.capnp.swift']:
+    assert (docs_out / name).read_bytes() == (fixture / 'golden' / f'{name}.expected').read_bytes(), \
+        f'golden output changed: {name}'
+for line in (docs_out / 'docs-hostile.capnp.swift').read_text(encoding='utf-8').splitlines():
+    if 'injected' in line or 'code()' in line:
+        assert line.lstrip().startswith('/// '), f'doc text escaped its comment: {line!r}'
+run([swiftc, *flags, '-I', host, '-typecheck', docs_out / 'docs.capnp.swift',
+     docs_out / 'docs-hostile.capnp.swift'])
+
+# Hand-edited requests: sourceInfo may be missing entries, or missing entirely, and member lists
+# may not match. Doc comments are cosmetic, so each case still generates.
+capnp_prefix = Path(capnp).resolve().parent.parent
+schema_capnp = next((p for p in [capnp_prefix / 'include/capnp/schema.capnp',
+                                 Path('/usr/include/capnp/schema.capnp'),
+                                 Path('/usr/local/include/capnp/schema.capnp')] if p.is_file()), None)
+assert schema_capnp, f'schema.capnp not found near {capnp}'
+docs_text = run([capnp, 'convert', 'binary:text', schema_capnp, 'CodeGeneratorRequest'],
+                data=run([capnp, 'compile', '-o-', f'--src-prefix={fixture}', fixture / 'docs.capnp'])).decode()
+
+source_info = docs_text.rindex(',', 0, docs_text.index('sourceInfo = ['))
+
+def without_entry(tail, entry_id):
+    # Remove one `( id = N, ... )` entry by matching its parentheses, skipping string contents.
+    # (capnp 1.0 prints fewer SourceInfo fields than 1.5, so no regex on a field name.)
+    marker = f'( id = {entry_id},'
+    assert tail.count(marker) == 1, f'sourceInfo entry {entry_id} found {tail.count(marker)} times'
+    start = tail.index(marker)
+    depth, i, quoted = 0, start, False
+    while True:
+        c = tail[i]
+        if quoted:
+            if c == '\\':
+                i += 1
+            elif c == '"':
+                quoted = False
+        elif c == '"':
+            quoted = True
+        elif c == '(':
+            depth += 1
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    end = re.match(r'\)\s*,?\s*', tail[i:]).end() + i
+    return tail[:start] + tail[end:]
+
+def edited_docs(name, edit):
+    # Edit only the sourceInfo section: node IDs also appear in the nodes list.
+    if callable(edit):
+        tail = edit(docs_text[source_info:])
+    else:
+        tail, count = re.subn(edit, '', docs_text[source_info:], flags=re.S)
+        assert count == 1, f'{name}: edit matched {count} times'
+    text = docs_text[:source_info] + tail
+    request = run([capnp, 'convert', 'text:binary', schema_capnp, 'CodeGeneratorRequest'], data=text.encode())
+    out = docs / name
+    out.mkdir()
+    result = subprocess.run([plugin], input=request, capture_output=True, cwd=out)
+    assert result.returncode == 0, f'{name}: {result.stderr.decode()}'
+    return (out / 'docs.capnp.swift').read_text(encoding='utf-8'), result.stderr.decode()
+
+point_id = 0xd0c5000000000011
+# Point's own entry is gone: no doc for Point or its fields, the rest unchanged, no warning.
+output, stderr = edited_docs('missing-entry', lambda tail: without_entry(tail, point_id))
+assert not stderr, stderr
+assert 'A point in the plane' not in output and 'Horizontal position' not in output, output
+assert '/// File doc' in output and '/// A bare dot.' in output and '/// Draw heavier.' in output, output
+# Point lists one member too few: a warning, Point's own doc kept, all its member docs dropped.
+output, stderr = edited_docs('member-mismatch', r'\(\s*docComment = "Horizontal position\.\\n"\s*\),\s*')
+assert re.fullmatch(rf'capnpc-swift: warning: .*{point_id:x}.*\n', stderr), stderr
+assert '/// A point in the plane.' in output, output
+assert 'Horizontal position' not in output and 'Vertical position' not in output, output
+assert '/// A bare dot.' in output and '/// Draw heavier.' in output, output
+# No sourceInfo at all (older capnp): no doc lines; the only `///` is the generator's own.
+output, stderr = edited_docs('no-source-info', r',\s*sourceInfo = \[.*\]\s*(?=\)\s*$)')
+assert not stderr, stderr
+assert {line.strip() for line in output.splitlines() if '///' in line} == \
+    {'/// Active union tag, or nil for a tag unknown to this schema version.'}, output
+print('PASS: doc comments (golden, hostile text, missing and mismatched sourceInfo)', flush=True)
 
 
 if not args.host_only:

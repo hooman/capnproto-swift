@@ -68,7 +68,16 @@ The host executable buffers at most 64 MiB from stdin and decodes exactly one
 unpacked `CodeGeneratorRequest` through the runtime. Bootstrap offsets are
 transcribed from upstream `schema.capnp.h`. It builds an owned schema model,
 validates the supported subset, renders all files, then writes output. Annotations are
-never read, and annotation declarations are skipped. Other unsupported declarations in a
+never read, and annotation declarations are skipped. Doc comments come from
+`sourceInfo` and are read as bytes, not through `text()`: `text()` validates UTF-8 and
+sets the arena's sticky error, so one bad comment would fail the request. Invalid UTF-8
+becomes U+FFFD. Each of CR, LF and CRLF ends a `///` line; control characters other
+than tab, the bidi override and isolate characters (U+202A–U+202E, U+2066–U+2069) and
+trailing whitespace are dropped. Docs are cosmetic: a missing entry means no comment, an
+empty member list means no member comments, and a member list whose length differs from a
+rendered struct's fields drops that struct's member comments and prints a
+`capnpc-swift: warning:` on stderr. Structural corruption inside `sourceInfo`, such as a
+bad pointer, still fails the request like any other malformed message. Other unsupported declarations in a
 requested file, and fields whose own type is unsupported (an enum, interface, AnyPointer
 or generic type, even when imported), produce a nonzero exit with a `capnpc-swift:`
 diagnostic. An imported struct is checked only when its own file is generated. Output filenames

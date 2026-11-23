@@ -91,7 +91,10 @@ do {
         input.append(chunk)
     }
     let request = try RequestDecoder.decode(input)
-    let files = try SwiftGenerator(request: request).generate()
+    let (files, warnings) = try SwiftGenerator(request: request).generate()
+    for warning in warnings {
+        FileHandle.standardError.write(Data("capnpc-swift: warning: \(warning)\n".utf8))
+    }
     let manager = FileManager.default
     let root = URL(fileURLWithPath: manager.currentDirectoryPath, isDirectory: true)
         .resolvingSymlinksInPath().standardizedFileURL
