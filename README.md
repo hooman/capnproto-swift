@@ -132,7 +132,8 @@ amplification. `consumedByteCount` identifies the first frame when bytes contain
 concatenated messages. Packed streams must be unpacked before calling the runtime.
 
 Lists expose `count` and indexed access (`for i in 0..<list.count`) through
-`PrimitiveList<Element>`, `VoidList`, and unified generic `CapnpList<Element>`.
+`PrimitiveList<Element>`, `EnumList<Element>`, `VoidList`, and unified generic
+`CapnpList<Element>`.
 `TextReader` validates UTF-8 once on open and exposes `utf8: UTF8Span` (use
 `String(copying: text.utf8)` when an owned `String` is needed), `bytes: Span<UInt8>`,
 and `Iterable` borrowing iteration without the wire NUL. `DataReader` exposes
@@ -140,23 +141,34 @@ and `Iterable` borrowing iteration without the wire NUL. `DataReader` exposes
 `_capnpWhich` (nil for unknown future tags); inactive fields return their schema
 defaults. Named union/group fields return a reader over the parent layout.
 
+A schema enum becomes `public enum Name: UInt16, CapnpRuntime.CapnpEnum`, with one case
+per enumerant and its ordinal as the raw value. Enum fields return `Name?`: `nil` means an
+ordinal this schema version does not know, which a newer writer can send. For each enum
+field `x`, `_capnpRaw_x` returns the ordinal itself, after the schema default, so an
+unknown value can still be logged or forwarded. `EnumList<Element>` returns `Element?`
+from its subscript and the ordinal from `raw(at:)`.
+
 ## Supported scope
 
 - Standard unpacked framing, multiple segments, single- and double-far pointers.
 - Void, Bool, all signed/unsigned 8/16/32/64-bit integers, Float32/64, Text, Data,
-  structs, nested structs, lists (including lists of lists), groups, and unions.
+  structs, nested structs, enums, lists (including lists of lists), groups, and unions.
 - Scalar XOR defaults, empty pointer defaults, missing-field defaults, compatible
   primitive/pointer-list and struct-list schema evolution. Boolean lists cannot
   upgrade to struct lists.
 - Annotations are accepted and ignored, including `$Cxx.namespace` from
   `/capnp/c++.capnp`; annotation declarations generate nothing.
 - Schema doc comments become `///` comments on the generated file namespace, structs,
-  groups and field accessors. Comment text is sanitized, so it cannot leave its
+  groups, field accessors, enums and enum cases. Comment text is sanitized, so it cannot leave its
   comment line, and a missing or incomplete `sourceInfo` never fails a build.
 - One Embedded-clean generated API for host and embedded use.
 
-The generator diagnoses enums, interfaces, constants, generics, AnyPointer, and
-non-empty pointer defaults in the files it generates. An unused interface in an imported
+The generator diagnoses interfaces, constants, generics, AnyPointer, and non-empty
+pointer defaults in the files it generates. It also diagnoses enums that Swift cannot
+represent: an enum without enumerants, and an enum named `Void`, `Swift`,
+`CapnpRuntime`, `Type`, `Protocol` or a scalar type name such as `UInt16`, which would
+shadow names the generated code uses. Two generated types with the same Swift name in one
+scope (struct `E` and enum `EReader`) are diagnosed too. An unused interface in an imported
 file does not block generation. No builders, RPC, packed-stream decoder,
 public async API, or Sendable arena is provided. Apple targets require OS 27 (macOS,
 iOS, watchOS, tvOS, visionOS), where SE-0525's safe `RawSpan` loads are available.
@@ -246,8 +258,7 @@ reports when a toolchain fixes it.
 
 ### Known follow-up work
 
-Enumerant doc comments arrive with enum support. Unsupported v1 features listed above
-are deliberate scope limits, not silent stubs.
+Unsupported v1 features listed above are deliberate scope limits, not silent stubs.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the storage, lifetime, and validation model.
 Licensed under [MIT](LICENSE).

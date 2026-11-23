@@ -77,17 +77,22 @@ trailing whitespace are dropped. Docs are cosmetic: a missing entry means no com
 empty member list means no member comments, and a member list whose length differs from a
 rendered struct's fields drops that struct's member comments and prints a
 `capnpc-swift: warning:` on stderr. Structural corruption inside `sourceInfo`, such as a
-bad pointer, still fails the request like any other malformed message. Other unsupported declarations in a
-requested file, and fields whose own type is unsupported (an enum, interface, AnyPointer
-or generic type, even when imported), produce a nonzero exit with a `capnpc-swift:`
-diagnostic. An imported struct is checked only when its own file is generated. Output filenames
+bad pointer, still fails the request like any other malformed message. Enums become Swift
+enums with a `UInt16` raw value; an enum field's getter wraps a `_capnpRaw_` accessor that
+applies the schema default, so unknown ordinals read as `nil` but stay readable. Enums
+Swift cannot represent (no enumerants, or a name that would shadow one the generated code
+uses unqualified) and duplicate generated type names are diagnosed when the declaration is
+rendered, never while decoding, so an imported file that is not generated may contain them.
+Other unsupported declarations in a requested file, and fields whose own type is
+unsupported (an interface, AnyPointer or generic type, even when imported), produce a
+nonzero exit with a `capnpc-swift:` diagnostic. An imported struct is checked only when its own file is generated. Output filenames
 must be relative with no empty, `.`, `..`, or control-character components; preflight
 walks existing parent components via `lstat` so symlinked directories are resolved even
 when the leaf file does not yet exist, and rejects escaping symlinks, symlink leaves,
 and directory collisions. Rendering validates all requested files before writes; writes
 are atomic per file and newly created files are rolled back on a mid-run write failure.
 Path validation assumes the output directory is not concurrently mutated; it is not a
-race-resistant filesystem sandbox. Schema source documentation is not yet emitted.
+race-resistant filesystem sandbox.
 
 File IDs namespace generated readers, which emit `public import CapnpRuntime` so
 consumers enabling `InternalImportsByDefault` can expose generated types directly. Unions

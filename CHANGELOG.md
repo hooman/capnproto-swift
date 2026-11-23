@@ -12,6 +12,14 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ### Added
 
+- `capnpc-swift` generates Swift enums for Cap'n Proto enums:
+  `public enum Name: UInt16, CapnpRuntime.CapnpEnum`. Enum fields, including defaults and
+  fields in unions and groups, return `Name?`, where `nil` means an ordinal this schema
+  version does not know. `_capnpRaw_<field>` returns the ordinal itself. Enum doc comments
+  carry over, enumerants included.
+- `CapnpRuntime` adds `CapnpEnum`, the constraint generated enums conform to (not an
+  extension point), and `EnumList<Element>` for `List(SomeEnum)`, with an optional subscript
+  and `raw(at:)`. `List(List(SomeEnum))` is `CapnpList<EnumList<SomeEnum>>`.
 - `capnpc-swift` carries schema doc comments (`CodeGeneratorRequest.sourceInfo`) into
   generated `///` comments on the file namespace, structs, groups and field accessors.
   Comment text cannot escape its comment line: line breaks start a new `///` line, and
@@ -27,6 +35,8 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ### Fixed
 
+- A struct with an enum field was reported as `field offset exceeds struct pointer section`
+  instead of an unsupported field type.
 - `capnpc-swift` failed with `invalid CodeGeneratorRequest: typeMismatch` on a non-empty
   list default whose element type is unsupported, such as `List(MyEnum) = [a, b]`. It now
   reports the unsupported default.
