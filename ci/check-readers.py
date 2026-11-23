@@ -374,10 +374,39 @@ docs_text = run([capnp, 'convert', 'binary:text', schema_capnp, 'CodeGeneratorRe
 
 source_info = docs_text.rindex(',', 0, docs_text.index('sourceInfo = ['))
 
-def edited_docs(name, pattern):
+def without_entry(tail, entry_id):
+    # Remove one `( id = N, ... )` entry by matching its parentheses, skipping string contents.
+    # (capnp 1.0 prints fewer SourceInfo fields than 1.5, so no regex on a field name.)
+    marker = f'( id = {entry_id},'
+    assert tail.count(marker) == 1, f'sourceInfo entry {entry_id} found {tail.count(marker)} times'
+    start = tail.index(marker)
+    depth, i, quoted = 0, start, False
+    while True:
+        c = tail[i]
+        if quoted:
+            if c == '\\':
+                i += 1
+            elif c == '"':
+                quoted = False
+        elif c == '"':
+            quoted = True
+        elif c == '(':
+            depth += 1
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    end = re.match(r'\)\s*,?\s*', tail[i:]).end() + i
+    return tail[:start] + tail[end:]
+
+def edited_docs(name, edit):
     # Edit only the sourceInfo section: node IDs also appear in the nodes list.
-    tail, count = re.subn(pattern, '', docs_text[source_info:], flags=re.S)
-    assert count == 1, f'{name}: edit matched {count} times'
+    if callable(edit):
+        tail = edit(docs_text[source_info:])
+    else:
+        tail, count = re.subn(edit, '', docs_text[source_info:], flags=re.S)
+        assert count == 1, f'{name}: edit matched {count} times'
     text = docs_text[:source_info] + tail
     request = run([capnp, 'convert', 'text:binary', schema_capnp, 'CodeGeneratorRequest'], data=text.encode())
     out = docs / name
@@ -388,7 +417,7 @@ def edited_docs(name, pattern):
 
 point_id = 0xd0c5000000000011
 # Point's own entry is gone: no doc for Point or its fields, the rest unchanged, no warning.
-output, stderr = edited_docs('missing-entry', rf'\(\s*id = {point_id},.*?endByte = \d+ \),\s*')
+output, stderr = edited_docs('missing-entry', lambda tail: without_entry(tail, point_id))
 assert not stderr, stderr
 assert 'A point in the plane' not in output and 'Horizontal position' not in output, output
 assert '/// File doc' in output and '/// A bare dot.' in output and '/// Draw heavier.' in output, output
