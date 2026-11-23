@@ -181,3 +181,40 @@ public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable, ~Sendable, Cap
         Self(list.pointer(at: index).list(of: Element.listElementSize))
     }
 }
+
+/// A Cap'n Proto enum generated as a Swift enum whose raw value is the enumerant's ordinal.
+///
+/// `capnpc-swift` declares the conformance on every generated enum. The protocol is public so
+/// generated code can name it as a generic constraint (`EnumList<MyEnum>`); like
+/// ``CapnpPrimitive`` it is **not** an extension point, and its requirements may change in a
+/// minor release.
+public protocol CapnpEnum: RawRepresentable where RawValue == UInt16 {}
+
+/// Indexed view of `List(SomeEnum)`, two bytes per element.
+///
+/// The subscript returns `nil` for an ordinal unknown to this schema version, which a newer
+/// writer can send; ``raw(at:)`` returns the ordinal itself so it can still be logged or
+/// forwarded. List elements carry no schema default.
+public struct EnumList<Element: CapnpEnum>: ~Escapable, ~Sendable, CapnpListElement {
+    let reader: ListReader
+
+    @_lifetime(copy reader)
+    public init(_ reader: consuming ListReader) {
+        self.reader = reader
+    }
+
+    public var count: Int { reader.count }
+
+    /// The enumerant at `index`, or `nil` for an ordinal this schema version does not know.
+    public subscript(index: Int) -> Element? { Element(rawValue: raw(at: index)) }
+
+    /// The ordinal at `index`, including ordinals this schema version does not know.
+    public func raw(at index: Int) -> UInt16 { reader.data(at: index, default: UInt16(0)) }
+
+    public static var listElementEncoding: ElementSize { .pointer }
+
+    @_lifetime(copy list)
+    public static func decodeElement(from list: borrowing ListReader, at index: Int) -> Self {
+        Self(list.pointer(at: index).list(of: .twoBytes))
+    }
+}
