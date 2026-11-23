@@ -150,6 +150,9 @@ defaults. Named union/group fields return a reader over the parent layout.
   upgrade to struct lists.
 - Annotations are accepted and ignored, including `$Cxx.namespace` from
   `/capnp/c++.capnp`; annotation declarations generate nothing.
+- Schema doc comments become `///` comments on the generated file namespace, structs,
+  groups and field accessors. Comment text is sanitized, so it cannot leave its
+  comment line, and a missing or incomplete `sourceInfo` never fails a build.
 - One Embedded-clean generated API for host and embedded use.
 
 The generator diagnoses enums, interfaces, constants, generics, AnyPointer, and
@@ -243,8 +246,7 @@ reports when a toolchain fixes it.
 
 ### Known follow-up work
 
-Schema `sourceInfo` documentation is not yet propagated into generated Swift comments
-(`TODO(codegen-docs)` in `RequestDecoder.swift`). Unsupported v1 features listed above
+Enumerant doc comments arrive with enum support. Unsupported v1 features listed above
 are deliberate scope limits, not silent stubs.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the storage, lifetime, and validation model.
