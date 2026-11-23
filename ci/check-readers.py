@@ -114,7 +114,6 @@ if not args.skip_compile_fail:
 
 # Compiler diagnostics must be nonzero, actionable, and leave no partial output.
 unsupported = {
-    'enum': 'enum Color { red @0; }',
     'interface': 'interface Service {}',
     'const': 'const value :UInt32 = 1;',
     'generic': 'struct Box(T) { value @0 :T; }',
@@ -311,7 +310,8 @@ upstream_run = subprocess.run([plugin], input=request, capture_output=True, cwd=
 assert upstream_run.returncode == 0, upstream_run.stderr.decode()
 # Upstream files document their enums and interfaces too; no rendered struct may warn.
 assert not upstream_run.stderr, upstream_run.stderr.decode()
-# Not typechecked: it names readers for upstream files that cannot be generated yet (enums).
+# Not typechecked: it names readers for upstream files that cannot be generated yet
+# (AnyPointer, interfaces, generics).
 assert (work / 'upstream.capnp.swift').is_file()
 # An unused interface in an imported file does not block generation; a field that uses one does.
 (work / 'service.capnp').write_text('@0xa11071a7ed000004; interface Service {} '
@@ -438,6 +438,65 @@ assert {line.strip() for line in output.splitlines() if '///' in line} == \
 print('PASS: doc comments (golden, hostile text, missing and mismatched sourceInfo)', flush=True)
 
 
+# Enums (D-17 item 2). The goldens were written by hand. Oracle messages: an empty message
+# (schema defaults), known values, and ordinals unknown to this schema, written with a newer
+# twin that adds enumerants. Getters return nil for an unknown ordinal; the `_capnpRaw_`
+# accessors and EnumList.raw(at:) still return it.
+enums = work / 'enums'
+enums.mkdir()
+run([capnp, 'compile', '-o', f'{plugin}:{enums}', f'--src-prefix={fixture}',
+     fixture / 'enums-import.capnp', fixture / 'enums.capnp'])
+for name in ['enums-import.capnp.swift', 'enums.capnp.swift']:
+    assert (enums / name).read_bytes() == (fixture / 'golden' / f'{name}.expected').read_bytes(), \
+        f'golden output changed: {name}'
+enum_messages = [
+    ('enums.capnp', b'()'),
+    ('enums.capnp', b'(primary = green, colors = [red, blue], grid = [[green], [blue, red]], '
+                    b'level = high, mood = happy, choice = (shade = red), shuffled = blue)'),
+    ('enums-newer.capnp', b'(primary = violet, accent = red, colors = [violet, green], grid = [[violet]], '
+                          b'mood = ecstatic, extra = (tone = sad), choice = (none = void))'),
+]
+enum_args = []
+for mode, (schema, text) in enumerate(enum_messages):
+    (enums / f'palette-{mode}.bin').write_bytes(run([capnp, 'encode', fixture / schema, 'Palette'], data=text))
+    enum_args.append(f'{mode}:{enums / f"palette-{mode}.bin"}')
+run([swiftc, *flags, *link_flags, '-O', '-parse-as-library', '-I', host,
+     enums / 'enums-import.capnp.swift', enums / 'enums.capnp.swift', fixture / 'enums-verify.swift',
+     fixture / 'enums-main.swift', host / 'runtime.o', '-o', enums / 'verify'])
+print(run([enums / 'verify', *enum_args]).decode().strip(), flush=True)
+# Generated Swift cannot represent these, so they are diagnosed: an enum without enumerants,
+# enum names that would shadow a name generated code uses unqualified (or break a qualified
+# reference), and two generated types with the same Swift name in one scope.
+enum_rejects = {
+    'empty-enum': ('enum E {}', r'enum without enumerants'),
+    'shadow-scalar': ('enum UInt16 { a @0; }', r'would shadow'),
+    'shadow-void': ('enum Void { a @0; }', r'would shadow'),
+    'shadow-swift': ('enum Swift { a @0; }', r'would shadow'),
+    'shadow-runtime': ('enum CapnpRuntime { a @0; }', r'would shadow'),
+    'shadow-type': ('struct S { enum Type { a @0; } }', r'would shadow'),
+    'shadow-protocol': ('struct S { enum Protocol { a @0; } }', r'would shadow'),
+    'collide-top': ('struct E { x @0 :UInt8; } enum EReader { a @0; }', r'duplicate generated type name'),
+    'collide-nested': ('struct S { struct E { x @0 :UInt8; } enum EReader { a @0; } }',
+                       r'duplicate generated type name'),
+}
+for name, (schema, reject) in enum_rejects.items():
+    path = work / f'{name}.capnp'
+    path.write_text('@0xbedead1234567891;\n' + schema + '\n')
+    run([capnp, 'compile', '-o', plugin, path.name], reject=rf'capnpc-swift:.*{reject}')
+    assert not Path(str(path) + '.swift').exists()
+# Those checks apply to generated declarations only: an imported file may declare them, and
+# a qualified reference to an imported `Bool` enum shadows nothing. capnp includes only the
+# imported nodes something references, so the imported struct uses both odd enums.
+(work / 'odd-enums.capnp').write_text('@0xa11071a7ed00000a; enum E {} enum Bool { a @0; } '
+                                      'struct Plain { x @0 :UInt8; b @1 :Bool; e @2 :E; }')
+(work / 'uses-odd.capnp').write_text('@0xa11071a7ed00000b; using O = import "odd-enums.capnp"; '
+                                     'struct Box { plain @0 :O.Plain; flag @1 :O.Bool; }')
+odd_request = run([capnp, 'compile', '-o-', 'uses-odd.capnp'])
+assert b'odd-enums.capnp:Bool' in odd_request and b'odd-enums.capnp:E' in odd_request
+run([plugin], data=odd_request)
+print(f'PASS: enums (golden, 3 oracle messages, {len(enum_rejects)} diagnosed, imported tolerance)',
+      flush=True)
+
 # Per-declaration verdicts for upstream test.capnp (D-17 answer key). Each top-level
 # declaration is generated on its own: every other top-level node is re-scoped to a copy of
 # the file node that is not requested, so references still resolve but only the chosen
@@ -511,7 +570,9 @@ if not args.host_only:
     # entry traverses generated scalars, lists, text/data, nested structs and unions.
     run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', generated,
          fixture / 'verify.swift', '-o', embedded / 'readers.o'])
-    for obj in [embedded / 'runtime.o', embedded / 'readers.o']:
+    run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', enums / 'enums-import.capnp.swift',
+         enums / 'enums.capnp.swift', fixture / 'enums-verify.swift', '-o', embedded / 'enums.o'])
+    for obj in [embedded / 'runtime.o', embedded / 'readers.o', embedded / 'enums.o']:
         symbols = run(['nm', obj]).decode()
         assert not re.search(rf'\b_?({allocators})$', symbols, re.M), symbols
         print(f'PASS Embedded: {obj.name}, object bytes={obj.stat().st_size}', flush=True)

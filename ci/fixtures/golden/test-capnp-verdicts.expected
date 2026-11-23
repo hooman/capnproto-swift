@@ -1,5 +1,5 @@
-TestEnum: unsupported declaration kind 2 in test.capnp
-TestAllTypes: unsupported field type 15
+TestEnum: ok
+TestAllTypes: ok
 TestDefaults: duplicate field or unsupported non-empty pointer default: textField
 TestAnyPointer: unsupported field type 18
 TestAnyOthers: unsupported field type 18
@@ -10,8 +10,8 @@ TestUnionInUnion: ok
 TestGroups: ok
 TestInterleavedGroups: ok
 TestUnionDefaults: duplicate field or unsupported non-empty pointer default: s16s8s64s8Set
-TestNestedTypes: field offset exceeds struct pointer section: innerNestedEnum
-TestUsing: field offset exceeds struct pointer section: innerNestedEnum
+TestNestedTypes: ok
+TestUsing: ok
 TestLists: ok
 TestFieldZeroIsBit: ok
 TestListDefaults: duplicate field or unsupported non-empty pointer default: lists
@@ -64,12 +64,12 @@ TestKeywordMethods: unsupported declaration kind 3 in test.capnp
 TestAuthenticatedBootstrap: unsupported declaration kind 3 in test.capnp
 TestSturdyRef: unsupported field type 18
 TestSturdyRefHostId: ok
-TestSturdyRefObjectId: field offset exceeds struct pointer section: tag
+TestSturdyRefObjectId: ok
 TestProvisionId: ok
 TestRecipientId: ok
 TestThirdPartyCapId: ok
 TestJoinResult: ok
-TestNameAnnotation: field offset exceeds struct pointer section: anotherBadFieldName
+TestNameAnnotation: ok
 TestNameAnnotationInterface: unsupported declaration kind 3 in test.capnp
 TestImpliedFirstField: duplicate field or unsupported non-empty pointer default: textStruct
 testImpliedFirstField: unsupported declaration kind 4 in test.capnp
