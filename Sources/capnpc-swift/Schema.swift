@@ -51,6 +51,7 @@ struct SchemaField {
     let discriminant: UInt16
     let groupID: UInt64?
     let unsupportedDefault: Bool
+    var doc: String? = nil
 }
 
 struct SchemaNode {
@@ -60,11 +61,15 @@ struct SchemaNode {
     let nested: [(id: UInt64, name: String)]
     let generic: Bool
     let group: Bool
-    let fields: [SchemaField]
+    var fields: [SchemaField]
     let discriminantCount: UInt16
     let discriminantOffset: Int
     let dataWords: UInt16
     let pointerCount: UInt16
+    var doc: String? = nil
+    // Set when sourceInfo lists a different number of members than the struct has fields;
+    // the member docs are dropped and the generator warns if it renders this node.
+    var memberDocMismatch: (members: Int, fields: Int)? = nil
 }
 
 struct RequestedFile {

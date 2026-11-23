@@ -26,8 +26,6 @@ enum RequestDecoder {
         String(copying: reader.utf8)
     }
 
-    // TODO(codegen-docs): decode CodeGeneratorRequest.sourceInfo and carry declaration
-    // and member documentation through SchemaRequest into generated Swift doc comments.
     static func request(_ root: borrowing StructReader) throws -> SchemaRequest {
         var nodes: [UInt64: SchemaNode] = [:]
         let list = root.pointerField(at: 0).list(of: .inlineComposite)
@@ -38,6 +36,7 @@ enum RequestDecoder {
             }
             nodes[node.id] = node
         }
+        attachDocs(root.pointerField(at: 3).list(of: .inlineComposite), to: &nodes)
         var files: [RequestedFile] = []
         let requested = root.pointerField(at: 1).list(of: .inlineComposite)
         var ids: Set<UInt64> = []
@@ -51,6 +50,45 @@ enum RequestDecoder {
         }
         guard !files.isEmpty else { throw CompilerFailure("request has no requested files") }
         return SchemaRequest(nodes: nodes, files: files)
+    }
+
+    // CodeGeneratorRequest.sourceInfo (pointer 3) is List(Node.SourceInfo): id is data word 0,
+    // docComment pointer 0, and members pointer 1, a List(Member { docComment @0 }) in
+    // Node.struct.fields order. Docs are cosmetic, so nothing here throws: entries for unknown
+    // nodes and repeated IDs are skipped, a missing entry means no doc, and a member list whose
+    // length differs from the struct's fields drops that node's member docs (the generator warns
+    // if it renders the node). An empty member list means no member docs. Enumerant and method
+    // members are not read yet.
+    static func attachDocs(_ list: borrowing ListReader, to nodes: inout [UInt64: SchemaNode]) {
+        var seen: Set<UInt64> = []
+        for i in 0..<list.count {
+            let info = list.structure(at: i)
+            let id = info.data(at: 0, default: UInt64(0))
+            guard seen.insert(id).inserted, var node = nodes[id] else { continue }
+            node.doc = doc(info.pointerField(at: 0))
+            let members = info.pointerField(at: 1).list(of: .inlineComposite)
+            if node.kind == 1, members.count != 0 {
+                if members.count == node.fields.count {
+                    for j in 0..<members.count {
+                        node.fields[j].doc = doc(members.structure(at: j).pointerField(at: 0))
+                    }
+                } else {
+                    node.memberDocMismatch = (members.count, node.fields.count)
+                }
+            }
+            nodes[id] = node
+        }
+    }
+
+    // Read as bytes, not text(): text() validates UTF-8 and records a sticky arena error,
+    // which would fail the whole request over a comment. Invalid UTF-8 becomes U+FFFD.
+    static func doc(_ pointer: borrowing PointerReader) -> String? {
+        let reader = pointer.data()
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(reader.count)
+        for i in 0..<reader.count { bytes.append(reader[i]) }
+        if bytes.last == 0 { bytes.removeLast() }
+        return bytes.isEmpty ? nil : String(decoding: bytes, as: UTF8.self)
     }
 
     // Annotations (Node pointer 2, Field pointer 1) are never read: they carry no wire
