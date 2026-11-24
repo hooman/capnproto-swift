@@ -113,6 +113,7 @@ enum RequestDecoder {
         }
         var fields: [SchemaField] = []
         var enumerants: [SchemaEnumerant] = []
+        var constant: SchemaConstant?
         if kind == 1 {
             let list = reader.pointerField(at: 3).list(of: .inlineComposite)
             for i in 0..<list.count { fields.append(try field(list.structure(at: i))) }
@@ -123,6 +124,19 @@ enum RequestDecoder {
                 enumerants.append(
                     SchemaEnumerant(name: string(list.structure(at: i).pointerField(at: 0).text())))
             }
+        } else if kind == 4 {
+            // Node.const: type is pointer 3 and value pointer 4. Value's discriminant is data
+            // UInt16 0; an enum value's ordinal is data UInt16 1.
+            let type = try type(reader.pointerField(at: 3).structure(), depth: 0)
+            let value = reader.pointerField(at: 4).structure()
+            let valueKind = value.data(at: 0, default: UInt16(0))
+            var expression = ""
+            if case .scalar(let scalar) = type, valueKind == scalar.rawValue {
+                expression = scalarDefault(value, scalar)
+            }
+            constant = SchemaConstant(
+                type: type, valueKind: valueKind, expression: expression,
+                ordinal: value.data(at: 1, default: UInt16(0)))
         }
         var node = SchemaNode(
             id: reader.data(at: 0, default: UInt64(0)),
@@ -134,6 +148,7 @@ enum RequestDecoder {
             dataWords: kind == 1 ? reader.data(at: 7, default: UInt16(0)) : 0,
             pointerCount: kind == 1 ? reader.data(at: 12, default: UInt16(0)) : 0)
         node.enumerants = enumerants
+        node.constant = constant
         return node
     }
 

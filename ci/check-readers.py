@@ -115,7 +115,7 @@ if not args.skip_compile_fail:
 # Compiler diagnostics must be nonzero, actionable, and leave no partial output.
 unsupported = {
     'interface': 'interface Service {}',
-    'const': 'const value :UInt32 = 1;',
+    'const': 'const value :Text = "no";',
     'generic': 'struct Box(T) { value @0 :T; }',
     'any': 'struct Box { value @0 :AnyPointer; }',
     'text-default': 'struct Box { value @0 :Text = "no"; }',
@@ -559,6 +559,78 @@ assert (corpus / 'verdicts.txt').read_bytes() == (fixture / 'golden/test-capnp-v
 print(f'PASS: test.capnp verdicts ({len(verdicts)} declarations, '
       f'{sum(v.endswith(": ok") for v in verdicts)} generate)', flush=True)
 
+# Scalar and enum constants (D-17 item 3). The golden was written by hand: main's output for a
+# twin without the constants, plus the expected constant lines. The oracle is capnp itself:
+# `capnp eval -b` encodes a struct constant whose fields reference the scalar constants, so the
+# verifier compares floats by bit pattern; enum constants are compared by name with `capnp eval`.
+constants = work / 'constants'
+constants.mkdir()
+run([capnp, 'compile', '-o', f'{plugin}:{constants}', f'--src-prefix={fixture}',
+     fixture / 'enums-import.capnp', fixture / 'constants.capnp'])
+for name in ['enums-import.capnp.swift', 'constants.capnp.swift']:
+    expected = 'enums-import' if name.startswith('enums') else 'constants'
+    assert (constants / name).read_bytes() == (fixture / 'golden' / f'{expected}.capnp.swift.expected').read_bytes(), \
+        f'golden output changed: {name}'
+(constants / 'oracle.bin').write_bytes(
+    run([capnp, 'eval', '-b', fixture / 'constants-oracle.capnp', 'values']))
+run([swiftc, *flags, *link_flags, '-O', '-parse-as-library', '-I', host,
+     constants / 'enums-import.capnp.swift', constants / 'constants.capnp.swift',
+     fixture / 'constants-verify.swift', fixture / 'constants-main.swift', host / 'runtime.o',
+     '-o', constants / 'verify'])
+printed = run([constants / 'verify', constants / 'oracle.bin']).decode().split()
+evaluated = [f'{name}={run([capnp, "eval", fixture / "constants.capnp", name]).decode().strip()}'
+             for name in ['level', 'color', 'Limits.shade']]
+assert printed == evaluated, (printed, evaluated)
+# Deferred constant types are diagnosed in generated files, at file and struct scope.
+const_rejects = {
+    'const-text': ('const t :Text = "x";', r'unsupported constant type 12: t'),
+    'const-data': ('const d :Data = "x";', r'unsupported constant type 13: d'),
+    'const-list': ('const l :List(UInt8) = [1];', r'unsupported constant type 14: l'),
+    'const-struct': ('struct S { x @0 :UInt8; } const s :S = (x = 1);', r'unsupported constant type 16: s'),
+    'const-nested': ('struct S { x @0 :UInt8; const t :Text = "x"; }', r'unsupported constant type 12: t'),
+}
+for name, (schema, reject) in const_rejects.items():
+    path = work / f'{name}.capnp'
+    path.write_text('@0xbedead1234567892;\n' + schema + '\n')
+    run([capnp, 'compile', '-o', plugin, path.name], reject=rf'capnpc-swift:.*{reject}')
+    assert not Path(str(path) + '.swift').exists()
+# Hand-edited requests reach what capnp would refuse to write. capnp never puts an imported
+# file's constants in a request (not even ones a default references), so the imported-file
+# case is the verdict corpus below: each run carries test.capnp's text and struct constants
+# in a file that is not generated.
+constants_request = run([capnp, 'compile', '-o-', f'--src-prefix={fixture}', fixture / 'constants.capnp'])
+
+def edited_constants(name, edit, reject=None):
+    tree = capnp_message.decode(constants_request)
+    by_id = {node.u64(0): node for node in tree.pointers[0].items}
+    edit(by_id)
+    out = constants / name
+    out.mkdir()
+    run_in(out, [plugin], data=capnp_message.encode(tree), reject=reject)
+    return out / 'constants.capnp.swift'
+
+def const_value(by_id, node_id):
+    return by_id[node_id].pointers[4]           # Node.const.value
+# A NaN payload survives: the emitted bit pattern is the request's, not a canonical NaN.
+generated_nan = edited_constants('nan-payload', lambda by_id: struct.pack_into(
+    '<I', const_value(by_id, 0xc0c500000000001b).data, 4, 0x7fa00001))
+assert 'public static var `notANumber`: Float { Float(bitPattern: 2141192193) }' in generated_nan.read_text()
+# An enum ordinal with no enumerant, a value whose type disagrees with the constant's, and a
+# constant named like a generated type in the same scope.
+edited_constants('enum-ordinal', lambda by_id: struct.pack_into(
+    '<H', const_value(by_id, 0xc0c5000000000022).data, 2, 7),
+    reject=r'capnpc-swift:.*enum constant ordinal 7 is out of range: color')
+edited_constants('type-mismatch', lambda by_id: struct.pack_into(
+    '<H', const_value(by_id, 0xc0c5000000000010).data, 0, 5),
+    reject=r'capnpc-swift:.*constant type mismatch for answer')
+
+def rename_answer(by_id):
+    entry = next(e for e in by_id[0xc0c5000000000001].pointers[1].items if e.u64(0) == 0xc0c5000000000010)
+    entry.pointers[0] = capnp_message.List(2, 6, raw=b'Color\0')
+edited_constants('name-collision', rename_answer, reject=r'capnpc-swift:.*duplicate generated type name')
+print(f'PASS: constants (golden, C++ oracle bit-exact, {len(const_rejects)} diagnosed, 4 edited requests)',
+      flush=True)
+
 if not args.host_only:
     embedded = work / 'embedded'
     embedded.mkdir(exist_ok=True)
@@ -572,7 +644,9 @@ if not args.host_only:
          fixture / 'verify.swift', '-o', embedded / 'readers.o'])
     run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', enums / 'enums-import.capnp.swift',
          enums / 'enums.capnp.swift', fixture / 'enums-verify.swift', '-o', embedded / 'enums.o'])
-    for obj in [embedded / 'runtime.o', embedded / 'readers.o', embedded / 'enums.o']:
+    run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', constants / 'enums-import.capnp.swift',
+         constants / 'constants.capnp.swift', fixture / 'constants-verify.swift', '-o', embedded / 'constants.o'])
+    for obj in [embedded / 'runtime.o', embedded / 'readers.o', embedded / 'enums.o', embedded / 'constants.o']:
         symbols = run(['nm', obj]).decode()
         assert not re.search(rf'\b_?({allocators})$', symbols, re.M), symbols
         print(f'PASS Embedded: {obj.name}, object bytes={obj.stat().st_size}', flush=True)

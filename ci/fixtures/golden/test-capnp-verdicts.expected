@@ -22,7 +22,7 @@ TestOldUnionVersion: ok
 TestNewUnionVersion: ok
 TestStructUnion: ok
 TestPrintInlineStructs: ok
-TestWholeFloatDefault: unsupported or excessively nested declaration 12848740249178797035
+TestWholeFloatDefault: ok
 TestGenerics: generic structs are outside readers-only v1
 BoxedText: ok
 TestGenericsWrapper: generic structs are outside readers-only v1
@@ -32,20 +32,20 @@ TestImplicitMethodParamsInGeneric: unsupported declaration kind 3 in test.capnp
 TestGenericsUnion: generic structs are outside readers-only v1
 TestUseGenerics: duplicate field or unsupported non-empty pointer default: default
 TestEmptyStruct: ok
-TestConstants: unsupported or excessively nested declaration 10060490489348360306
-globalInt: unsupported declaration kind 4 in test.capnp
-globalText: unsupported declaration kind 4 in test.capnp
-globalStruct: unsupported declaration kind 4 in test.capnp
-globalPrintableStruct: unsupported declaration kind 4 in test.capnp
-derivedConstant: unsupported declaration kind 4 in test.capnp
-genericConstant: unsupported declaration kind 4 in test.capnp
-embeddedData: unsupported declaration kind 4 in test.capnp
-embeddedText: unsupported declaration kind 4 in test.capnp
-embeddedStruct: unsupported declaration kind 4 in test.capnp
-nonAsciiText: unsupported declaration kind 4 in test.capnp
-blockText: unsupported declaration kind 4 in test.capnp
+TestConstants: unsupported constant type 14: uint32ListConst
+globalInt: ok
+globalText: unsupported constant type 12: globalText
+globalStruct: unsupported constant type 16: globalStruct
+globalPrintableStruct: unsupported constant type 16: globalPrintableStruct
+derivedConstant: unsupported constant type 16: derivedConstant
+genericConstant: unsupported constant type 16: genericConstant
+embeddedData: unsupported constant type 13: embeddedData
+embeddedText: unsupported constant type 12: embeddedText
+embeddedStruct: unsupported constant type 16: embeddedStruct
+nonAsciiText: unsupported constant type 12: nonAsciiText
+blockText: unsupported constant type 12: blockText
 TestAnyPointerConstants: unsupported field type 18
-anyPointerConstants: unsupported declaration kind 4 in test.capnp
+anyPointerConstants: unsupported constant type 16: anyPointerConstants
 TestListOfAny: unsupported field type 18
 TestInterface: unsupported declaration kind 3 in test.capnp
 TestExtends: unsupported declaration kind 3 in test.capnp
@@ -72,7 +72,7 @@ TestJoinResult: ok
 TestNameAnnotation: ok
 TestNameAnnotationInterface: unsupported declaration kind 3 in test.capnp
 TestImpliedFirstField: duplicate field or unsupported non-empty pointer default: textStruct
-testImpliedFirstField: unsupported declaration kind 4 in test.capnp
+testImpliedFirstField: unsupported constant type 16: testImpliedFirstField
 TestCycleANoCaps: ok
 TestCycleBNoCaps: ok
 TestCycleAWithCaps: ok

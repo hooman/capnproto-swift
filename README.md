@@ -148,6 +148,11 @@ field `x`, `_capnpRaw_x` returns the ordinal itself, after the schema default, s
 unknown value can still be logged or forwarded. `EnumList<Element>` returns `Element?`
 from its subscript and the ordinal from `raw(at:)`.
 
+Scalar and enum constants become computed static properties of the file namespace or the
+enclosing struct's reader: `const answer :Int32 = 42;` is
+`public static var answer: Int32 { Int32(42) }`, and an enum constant returns its case.
+Float constants are written by bit pattern, so NaN, infinities and `-0.0` are exact.
+
 ## Supported scope
 
 - Standard unpacked framing, multiple segments, single- and double-far pointers.
@@ -161,10 +166,11 @@ from its subscript and the ordinal from `raw(at:)`.
 - Schema doc comments become `///` comments on the generated file namespace, structs,
   groups, field accessors, enums and enum cases. Comment text is sanitized, so it cannot leave its
   comment line, and a missing or incomplete `sourceInfo` never fails a build.
+- Scalar and enum constants, at file scope and nested in structs.
 - One Embedded-clean generated API for host and embedded use.
 
-The generator diagnoses interfaces, constants, generics, AnyPointer, and non-empty
-pointer defaults in the files it generates. It also diagnoses enums that Swift cannot
+The generator diagnoses interfaces, generics, AnyPointer, non-empty pointer defaults, and
+text, data, struct, list and AnyPointer constants in the files it generates. It also diagnoses enums that Swift cannot
 represent: an enum without enumerants, and an enum named `Void`, `Swift`,
 `CapnpRuntime`, `Type`, `Protocol` or a scalar type name such as `UInt16`, which would
 shadow names the generated code uses. Two generated types with the same Swift name in one

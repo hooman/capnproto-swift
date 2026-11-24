@@ -45,7 +45,7 @@ struct SwiftGenerator {
             lines += [availability, "public enum Capnp_\(String(file.id, radix: 16)) {"]
             var names: Set<String> = []
             for node in children(of: file.id) {
-                guard node.kind == 1 || node.kind == 2 else {
+                guard node.kind == 1 || node.kind == 2 || node.kind == 4 else {
                     throw CompilerFailure(
                         "unsupported declaration kind \(node.kind) in \(file.filename)")
                 }
@@ -53,11 +53,7 @@ struct SwiftGenerator {
                 guard names.insert(name).inserted else {
                     throw CompilerFailure("duplicate generated type name \(name)")
                 }
-                let rendered =
-                    node.kind == 2
-                    ? try renderEnum(node, depth: 0, warnings: &warnings)
-                    : try render(node, depth: 0, warnings: &warnings)
-                lines += rendered.map { "    " + $0 }
+                lines += try renderChild(node, depth: 0, warnings: &warnings).map { "    " + $0 }
             }
             lines.append("}")
             output.append(GeneratedFile(path: path, contents: lines.joined(separator: "\n") + "\n"))
@@ -136,9 +132,9 @@ struct SwiftGenerator {
         return name
     }
 
-    // Struct and group readers take a `Reader` suffix; enums are values and keep their name.
+    // Struct and group readers take a `Reader` suffix; enums and constants keep their name.
     private func localName(_ node: SchemaNode) throws -> String {
-        try identifier(declaredName(node) + (node.kind == 2 ? "" : "Reader"))
+        try identifier(declaredName(node) + (node.kind == 1 ? "Reader" : ""))
     }
 
     // Follow lexical scopes only, not field references: recursive structs are legal.
@@ -284,14 +280,65 @@ struct SwiftGenerator {
             guard childNames.insert(childName).inserted else {
                 throw CompilerFailure("duplicate generated type name \(childName)")
             }
-            let rendered =
-                child.kind == 2
-                ? try renderEnum(child, depth: depth + 1, warnings: &warnings)
-                : try render(child, depth: depth + 1, warnings: &warnings)
-            lines += rendered.map { "    " + $0 }
+            lines += try renderChild(child, depth: depth + 1, warnings: &warnings).map {
+                "    " + $0
+            }
         }
         lines.append("}")
         return lines
+    }
+
+    private func renderChild(
+        _ node: SchemaNode, depth: Int, warnings: inout [String]
+    ) throws -> [String] {
+        switch node.kind {
+        case 2: return try renderEnum(node, depth: depth, warnings: &warnings)
+        case 4: return try renderConstant(node)
+        default: return try render(node, depth: depth, warnings: &warnings)
+        }
+    }
+
+    // Scalar and enum constants become computed static properties of the enclosing file
+    // namespace or reader, so no global storage or lazy initialization is generated. Scalars
+    // reuse the field-default expressions (floats by bit pattern, so NaN payloads and -0.0
+    // survive). Text, data, struct, list and AnyPointer constants need an embedded
+    // default-message reader and wait for the D-14 revision.
+    private func renderConstant(_ node: SchemaNode) throws -> [String] {
+        let name = try declaredName(node)
+        guard let constant = node.constant else {
+            throw CompilerFailure("missing constant value: \(name)")
+        }
+        let kind: UInt16
+        switch constant.type {
+        case .scalar(let scalar): kind = scalar.rawValue
+        case .text: kind = 12
+        case .data: kind = 13
+        case .list: kind = 14
+        case .enumeration: kind = 15
+        case .structure: kind = 16
+        case .unsupported(let other): kind = other
+        }
+        guard kind <= 11 || kind == 15 else {
+            throw CompilerFailure("unsupported constant type \(kind): \(name)")
+        }
+        guard constant.valueKind == kind else {
+            throw CompilerFailure("constant type mismatch for \(name)")
+        }
+        let value: String
+        if case .enumeration(let id) = constant.type {
+            guard let enumeration = request.nodes[id], enumeration.kind == 2,
+                Int(constant.ordinal) < enumeration.enumerants.count
+            else {
+                throw CompilerFailure(
+                    "enum constant ordinal \(constant.ordinal) is out of range: \(name)")
+            }
+            value = "." + (try identifier(enumeration.enumerants[Int(constant.ordinal)].name))
+        } else {
+            value = constant.expression
+        }
+        return docLines(node.doc) + [
+            "public static var \(try identifier(name)): \(try swiftType(constant.type)) { \(value) }"
+        ]
     }
 
     // Generated code names these unqualified (`UInt16(0)`, `CapnpRuntime.StructReader`), so an
