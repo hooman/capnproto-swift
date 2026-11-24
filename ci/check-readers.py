@@ -98,7 +98,19 @@ for mode, typename, message in [(0, 'Example', b'()'), (1, 'Example', full),
             assert segments > 1
         path = work / f'message-{mode}-{segment_size}.bin'
         path.write_bytes(data)
-        print(f'segments={segments}: ' + run([host / 'verify', path, mode, args.iterations]).decode().strip(), flush=True)
+        unpacked = run([host / 'verify', path, mode, args.iterations]).decode().strip()
+        print(f'segments={segments}: ' + unpacked, flush=True)
+        # Packed oracle (D-17 item 4): the committed bytes are what capnp emitted when the
+        # answer key was written, and the live encoder must still agree. The host driver
+        # unpacks them, requires the result to equal the unpacked encoding byte for byte,
+        # then runs the same assertions through the Embedded-shaped verify_packed entry.
+        packed = fixture / 'packed' / f'message-{mode}-{segment_size}.packed'
+        assert run(command + ['--packed'], data=message) == packed.read_bytes(), \
+            f'capnp encode --packed no longer matches {packed.name}'
+        result = run([host / 'verify', packed, mode, args.iterations, path]).decode().strip()
+        assert result.startswith('PASS packed ') and \
+            result.split('checksum=')[1].split()[0] == unpacked.split('checksum=')[1].split()[0], result
+        print(f'segments={segments}: ' + result, flush=True)
 
 if not args.skip_compile_fail:
     output = run([
