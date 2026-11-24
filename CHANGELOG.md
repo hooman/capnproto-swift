@@ -10,6 +10,11 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-23
+
+Readers-only schema completeness: the generator now accepts annotations, doc comments,
+enums, and scalar and enum constants. The runtime still only reads.
+
 ### Added
 
 - `capnpc-swift` generates scalar and enum constants as computed static properties of the
@@ -44,6 +49,12 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 - `capnpc-swift` failed with `invalid CodeGeneratorRequest: typeMismatch` on a non-empty
   list default whose element type is unsupported, such as `List(MyEnum) = [a, b]`. It now
   reports the unsupported default.
+- `capnpc-swift --version` printed `0.1.0-dev`; it now prints the release version.
+
+### Not yet supported
+
+- Builders (writing messages), RPC and interfaces, generics, AnyPointer, text, data,
+  struct, list and AnyPointer constants, non-empty pointer defaults, and packed framing.
 
 ## [0.1.0] - 2026-11-21
 
