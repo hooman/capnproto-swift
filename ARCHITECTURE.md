@@ -83,6 +83,10 @@ applies the schema default, so unknown ordinals read as `nil` but stay readable.
 Swift cannot represent (no enumerants, or a name that would shadow one the generated code
 uses unqualified) and duplicate generated type names are diagnosed when the declaration is
 rendered, never while decoding, so an imported file that is not generated may contain them.
+Scalar and enum constants render as computed `static var`s, with no global storage or lazy
+initialization, reusing the field-default expressions; floats are written by bit pattern.
+Constants of other types need an embedded default-message reader, the same mechanism as
+non-empty pointer defaults, and are diagnosed at render time like unrepresentable enums.
 Other unsupported declarations in a requested file, and fields whose own type is
 unsupported (an interface, AnyPointer or generic type, even when imported), produce a
 nonzero exit with a `capnpc-swift:` diagnostic. An imported struct is checked only when its own file is generated. Output filenames

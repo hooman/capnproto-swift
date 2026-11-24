@@ -12,6 +12,10 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ### Added
 
+- `capnpc-swift` generates scalar and enum constants as computed static properties of the
+  file namespace or the enclosing struct's reader, for example
+  `public static var answer: Int32 { Int32(42) }`. Float constants keep their exact bit
+  pattern. Text, data, struct, list and AnyPointer constants are still diagnosed.
 - `capnpc-swift` generates Swift enums for Cap'n Proto enums:
   `public enum Name: UInt16, CapnpRuntime.CapnpEnum`. Enum fields, including defaults and
   fields in unions and groups, return `Name?`, where `nil` means an ordinal this schema
