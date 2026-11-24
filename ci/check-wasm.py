@@ -93,11 +93,12 @@ runtime_obj, negative_obj = work / 'gate-runtime.o', work / 'gate-negative.o'
 run([*embedded, '-strict-memory-safety', '-module-name', 'CapnpRuntime', '-c', *sources,
      root / 'ci/runtime-entry.swift', '-o', runtime_obj])
 run([*embedded, '-module-name', 'negative', '-c', root / 'ci/negative-control.swift', '-o', negative_obj])
-found = reachable_allocators(runtime_obj, 'capnp_embedded_probe')
-assert not found, f'allocators reachable from capnp_embedded_probe: {found}'
+for entry in ['capnp_embedded_probe', 'capnp_embedded_packed_probe']:
+    found = reachable_allocators(runtime_obj, entry)
+    assert not found, f'allocators reachable from {entry}: {found}'
 caught = reachable_allocators(negative_obj, '_negative_control')
 assert caught, 'negative control reaches no allocator: the call-graph gate is vacuous'
-print(f'PASS wasm-embedded allocation gate: runtime reaches none; negative control reaches {caught}', flush=True)
+print(f'PASS wasm-embedded allocation gate: runtime and packed probes reach none; negative control reaches {caught}', flush=True)
 
 # 2. Execution under every available runner.
 runners = []

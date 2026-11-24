@@ -199,6 +199,18 @@ struct PackedTests {
         #expect(unpack(examplePacked, options: ReaderOptions(traversalLimitWords: 2)) != nil)
     }
 
+    @Test func frameSizeMustFitInt() {
+        // Added after the answer key: the public API reaches this bound only through
+        // megabytes of zero runs, so the arithmetic is checked directly.
+        let limit = UInt64(Int.max / 8)
+        #expect(Packed.frameByteCount(headerWords: 1, bodyWords: 2) == 24)
+        #expect(Packed.frameByteCount(headerWords: 0, bodyWords: limit) == Int(limit) * 8)
+        #expect(Packed.frameByteCount(headerWords: 1, bodyWords: limit) == nil)
+        let maxHeader: UInt64 = (1 << 31) + 1
+        let maxBody = UInt64(UInt32.max) * UInt64(UInt32.max)
+        #expect(Packed.frameByteCount(headerWords: maxHeader, bodyWords: maxBody) == nil)
+    }
+
     @Test func hostileSegmentTablesAreMalformed() {
         let unlimited = ReaderOptions(traversalLimitWords: .max, segmentLimit: .max)
         // count-1 = 0xFFFFFFFF: 2^32 segments exceed even UInt32.max.
