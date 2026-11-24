@@ -114,7 +114,6 @@ if not args.skip_compile_fail:
 
 # Compiler diagnostics must be nonzero, actionable, and leave no partial output.
 unsupported = {
-    'enum': 'enum Color { red @0; }',
     'interface': 'interface Service {}',
     'const': 'const value :UInt32 = 1;',
     'generic': 'struct Box(T) { value @0 :T; }',
@@ -311,7 +310,8 @@ upstream_run = subprocess.run([plugin], input=request, capture_output=True, cwd=
 assert upstream_run.returncode == 0, upstream_run.stderr.decode()
 # Upstream files document their enums and interfaces too; no rendered struct may warn.
 assert not upstream_run.stderr, upstream_run.stderr.decode()
-# Not typechecked: it names readers for upstream files that cannot be generated yet (enums).
+# Not typechecked: it names readers for upstream files that cannot be generated yet
+# (AnyPointer, interfaces, generics).
 assert (work / 'upstream.capnp.swift').is_file()
 # An unused interface in an imported file does not block generation; a field that uses one does.
 (work / 'service.capnp').write_text('@0xa11071a7ed000004; interface Service {} '
@@ -374,15 +374,11 @@ docs_text = run([capnp, 'convert', 'binary:text', schema_capnp, 'CodeGeneratorRe
 
 source_info = docs_text.rindex(',', 0, docs_text.index('sourceInfo = ['))
 
-def without_entry(tail, entry_id):
-    # Remove one `( id = N, ... )` entry by matching its parentheses, skipping string contents.
-    # (capnp 1.0 prints fewer SourceInfo fields than 1.5, so no regex on a field name.)
-    marker = f'( id = {entry_id},'
-    assert tail.count(marker) == 1, f'sourceInfo entry {entry_id} found {tail.count(marker)} times'
-    start = tail.index(marker)
+def entry_end(text, start):
+    # Index just past the `)` that closes the `(` at `start`, skipping string contents.
     depth, i, quoted = 0, start, False
     while True:
-        c = tail[i]
+        c = text[i]
         if quoted:
             if c == '\\':
                 i += 1
@@ -395,9 +391,16 @@ def without_entry(tail, entry_id):
         elif c == ')':
             depth -= 1
             if depth == 0:
-                break
+                return i + 1
         i += 1
-    end = re.match(r'\)\s*,?\s*', tail[i:]).end() + i
+
+def without_entry(tail, entry_id):
+    # Remove one `( id = N, ... )` entry by matching its parentheses.
+    # (capnp 1.0 prints fewer SourceInfo fields than 1.5, so no regex on a field name.)
+    marker = f'( id = {entry_id},'
+    assert tail.count(marker) == 1, f'sourceInfo entry {entry_id} found {tail.count(marker)} times'
+    start = tail.index(marker)
+    end = re.match(r'\s*,?\s*', tail[entry_end(tail, start):]).end() + entry_end(tail, start)
     return tail[:start] + tail[end:]
 
 def edited_docs(name, edit):
@@ -435,6 +438,127 @@ assert {line.strip() for line in output.splitlines() if '///' in line} == \
 print('PASS: doc comments (golden, hostile text, missing and mismatched sourceInfo)', flush=True)
 
 
+# Enums (D-17 item 2). The goldens were written by hand. Oracle messages: an empty message
+# (schema defaults), known values, and ordinals unknown to this schema, written with a newer
+# twin that adds enumerants. Getters return nil for an unknown ordinal; the `_capnpRaw_`
+# accessors and EnumList.raw(at:) still return it.
+enums = work / 'enums'
+enums.mkdir()
+run([capnp, 'compile', '-o', f'{plugin}:{enums}', f'--src-prefix={fixture}',
+     fixture / 'enums-import.capnp', fixture / 'enums.capnp'])
+for name in ['enums-import.capnp.swift', 'enums.capnp.swift']:
+    assert (enums / name).read_bytes() == (fixture / 'golden' / f'{name}.expected').read_bytes(), \
+        f'golden output changed: {name}'
+enum_messages = [
+    ('enums.capnp', b'()'),
+    ('enums.capnp', b'(primary = green, colors = [red, blue], grid = [[green], [blue, red]], '
+                    b'level = high, mood = happy, choice = (shade = red), shuffled = blue)'),
+    ('enums-newer.capnp', b'(primary = violet, accent = red, colors = [violet, green], grid = [[violet]], '
+                          b'mood = ecstatic, extra = (tone = sad), choice = (none = void))'),
+]
+enum_args = []
+for mode, (schema, text) in enumerate(enum_messages):
+    (enums / f'palette-{mode}.bin').write_bytes(run([capnp, 'encode', fixture / schema, 'Palette'], data=text))
+    enum_args.append(f'{mode}:{enums / f"palette-{mode}.bin"}')
+run([swiftc, *flags, *link_flags, '-O', '-parse-as-library', '-I', host,
+     enums / 'enums-import.capnp.swift', enums / 'enums.capnp.swift', fixture / 'enums-verify.swift',
+     fixture / 'enums-main.swift', host / 'runtime.o', '-o', enums / 'verify'])
+print(run([enums / 'verify', *enum_args]).decode().strip(), flush=True)
+# Generated Swift cannot represent these, so they are diagnosed: an enum without enumerants,
+# enum names that would shadow a name generated code uses unqualified (or break a qualified
+# reference), and two generated types with the same Swift name in one scope.
+enum_rejects = {
+    'empty-enum': ('enum E {}', r'enum without enumerants'),
+    'shadow-scalar': ('enum UInt16 { a @0; }', r'would shadow'),
+    'shadow-void': ('enum Void { a @0; }', r'would shadow'),
+    'shadow-swift': ('enum Swift { a @0; }', r'would shadow'),
+    'shadow-runtime': ('enum CapnpRuntime { a @0; }', r'would shadow'),
+    'shadow-type': ('struct S { enum Type { a @0; } }', r'would shadow'),
+    'shadow-protocol': ('struct S { enum Protocol { a @0; } }', r'would shadow'),
+    'collide-top': ('struct E { x @0 :UInt8; } enum EReader { a @0; }', r'duplicate generated type name'),
+    'collide-nested': ('struct S { struct E { x @0 :UInt8; } enum EReader { a @0; } }',
+                       r'duplicate generated type name'),
+}
+for name, (schema, reject) in enum_rejects.items():
+    path = work / f'{name}.capnp'
+    path.write_text('@0xbedead1234567891;\n' + schema + '\n')
+    run([capnp, 'compile', '-o', plugin, path.name], reject=rf'capnpc-swift:.*{reject}')
+    assert not Path(str(path) + '.swift').exists()
+# Those checks apply to generated declarations only: an imported file may declare them, and
+# a qualified reference to an imported `Bool` enum shadows nothing. capnp includes only the
+# imported nodes something references, so the imported struct uses both odd enums.
+(work / 'odd-enums.capnp').write_text('@0xa11071a7ed00000a; enum E {} enum Bool { a @0; } '
+                                      'struct Plain { x @0 :UInt8; b @1 :Bool; e @2 :E; }')
+(work / 'uses-odd.capnp').write_text('@0xa11071a7ed00000b; using O = import "odd-enums.capnp"; '
+                                     'struct Box { plain @0 :O.Plain; flag @1 :O.Bool; }')
+odd_request = run([capnp, 'compile', '-o-', 'uses-odd.capnp'])
+assert b'odd-enums.capnp:Bool' in odd_request and b'odd-enums.capnp:E' in odd_request
+run([plugin], data=odd_request)
+print(f'PASS: enums (golden, 3 oracle messages, {len(enum_rejects)} diagnosed, imported tolerance)',
+      flush=True)
+
+# Per-declaration verdicts for upstream test.capnp (D-17 answer key). Each top-level
+# declaration is generated on its own: every other top-level node is re-scoped to a copy of
+# the file node that is not requested, so references still resolve but only the chosen
+# declaration is rendered. The verdict is `ok` or the generator's first diagnostic. The
+# request is edited as a decoded message tree (ci/capnp_message.py): capnp's text form prints
+# AnyPointer defaults as `<opaque pointer>` and cannot round-trip this request.
+sys.dont_write_bytecode = True   # keep ci/ free of __pycache__
+sys.path.insert(0, str(root / 'ci'))
+import copy
+import capnp_message
+
+# The codec must be faithful: a round-tripped request generates the same output.
+docs_request = run([capnp, 'compile', '-o-', f'--src-prefix={fixture}', fixture / 'docs.capnp'])
+round_trip = docs / 'round-trip'
+round_trip.mkdir()
+run_in(round_trip, [plugin], data=capnp_message.encode(capnp_message.decode(docs_request)))
+assert (round_trip / 'docs.capnp.swift').read_bytes() == (fixture / 'golden/docs.capnp.swift.expected').read_bytes()
+
+corpus = work / 'corpus'
+(corpus / 'testdata').mkdir(parents=True)
+upstream_test = (fixture / 'upstream/test.capnp').read_text(encoding='utf-8')
+cxx_import = 'using Cxx = import "c++.capnp";'
+assert upstream_test.count(cxx_import) == 1, 'vendored test.capnp changed its c++.capnp import'
+(corpus / 'test.capnp').write_text(upstream_test.replace(cxx_import, 'using Cxx = import "/capnp/c++.capnp";'),
+                                   encoding='utf-8')
+for name in ['packed', 'short.txt', 'binary']:
+    shutil.copyfile(fixture / 'upstream/testdata' / name, corpus / 'testdata' / name)
+tree = capnp_message.decode(run([capnp, 'compile', '-o-', f'--src-prefix={corpus}', corpus / 'test.capnp']))
+test_file_id, shadow_id = 0xd508eebdc2dc42b8, 0x5ad0000000000001
+nodes = tree.pointers[0]                       # CodeGeneratorRequest.nodes
+by_id = {node.u64(0): node for node in nodes.items}
+assert shadow_id not in by_id
+declarations = [(nested.pointers[0].raw.rstrip(b'\0').decode(), nested.u64(0))
+                for nested in by_id[test_file_id].pointers[1].items]   # Node.nestedNodes
+source_count = len(re.findall(r'^(?:struct|enum|interface|const|annotation) ', upstream_test, re.M))
+assert len(declarations) == source_count, f'{len(declarations)} nested nodes, {source_count} in source'
+shadow = copy.deepcopy(by_id[test_file_id])
+shadow.set_u64(0, shadow_id)
+nodes.items.append(shadow)
+nodes.count += 1
+top_level = [node for node in nodes.items if node.u64(2) == test_file_id]   # Node.scopeId
+assert len(top_level) == len(declarations)
+verdicts = []
+for index, (name, node_id) in enumerate(declarations):
+    for node in top_level:
+        node.set_u64(2, test_file_id if node.u64(0) == node_id else shadow_id)
+    out = corpus / 'out' / f'{index:02d}'   # by index: names can differ only in case
+    out.mkdir(parents=True)
+    result = subprocess.run([plugin], input=capnp_message.encode(tree), capture_output=True, cwd=out)
+    lines = result.stderr.decode().splitlines()
+    if result.returncode == 0:
+        assert not lines, f'{name}: {lines}'
+        verdicts.append(f'{name}: ok')
+    else:
+        assert lines and lines[0].startswith('capnpc-swift: '), f'{name}: {lines}'
+        verdicts.append(f'{name}: {lines[0][len("capnpc-swift: "):]}')
+(corpus / 'verdicts.txt').write_text('\n'.join(verdicts) + '\n')
+assert (corpus / 'verdicts.txt').read_bytes() == (fixture / 'golden/test-capnp-verdicts.expected').read_bytes(), \
+    f'test.capnp verdicts changed; see {corpus / "verdicts.txt"}'
+print(f'PASS: test.capnp verdicts ({len(verdicts)} declarations, '
+      f'{sum(v.endswith(": ok") for v in verdicts)} generate)', flush=True)
+
 if not args.host_only:
     embedded = work / 'embedded'
     embedded.mkdir(exist_ok=True)
@@ -446,7 +570,9 @@ if not args.host_only:
     # entry traverses generated scalars, lists, text/data, nested structs and unions.
     run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', generated,
          fixture / 'verify.swift', '-o', embedded / 'readers.o'])
-    for obj in [embedded / 'runtime.o', embedded / 'readers.o']:
+    run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', enums / 'enums-import.capnp.swift',
+         enums / 'enums.capnp.swift', fixture / 'enums-verify.swift', '-o', embedded / 'enums.o'])
+    for obj in [embedded / 'runtime.o', embedded / 'readers.o', embedded / 'enums.o']:
         symbols = run(['nm', obj]).decode()
         assert not re.search(rf'\b_?({allocators})$', symbols, re.M), symbols
         print(f'PASS Embedded: {obj.name}, object bytes={obj.stat().st_size}', flush=True)

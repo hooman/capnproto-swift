@@ -56,9 +56,9 @@ enum RequestDecoder {
     // docComment pointer 0, and members pointer 1, a List(Member { docComment @0 }) in
     // Node.struct.fields order. Docs are cosmetic, so nothing here throws: entries for unknown
     // nodes and repeated IDs are skipped, a missing entry means no doc, and a member list whose
-    // length differs from the struct's fields drops that node's member docs (the generator warns
-    // if it renders the node). An empty member list means no member docs. Enumerant and method
-    // members are not read yet.
+    // length differs from the struct's fields or the enum's enumerants drops that node's member
+    // docs (the generator warns if it renders the node). An empty member list means no member
+    // docs. Interface method members are not read.
     static func attachDocs(_ list: borrowing ListReader, to nodes: inout [UInt64: SchemaNode]) {
         var seen: Set<UInt64> = []
         for i in 0..<list.count {
@@ -67,13 +67,19 @@ enum RequestDecoder {
             guard seen.insert(id).inserted, var node = nodes[id] else { continue }
             node.doc = doc(info.pointerField(at: 0))
             let members = info.pointerField(at: 1).list(of: .inlineComposite)
-            if node.kind == 1, members.count != 0 {
-                if members.count == node.fields.count {
+            let expected = node.kind == 1 ? node.fields.count : node.enumerants.count
+            if node.kind == 1 || node.kind == 2, members.count != 0 {
+                if members.count == expected {
                     for j in 0..<members.count {
-                        node.fields[j].doc = doc(members.structure(at: j).pointerField(at: 0))
+                        let text = doc(members.structure(at: j).pointerField(at: 0))
+                        if node.kind == 1 {
+                            node.fields[j].doc = text
+                        } else {
+                            node.enumerants[j].doc = text
+                        }
                     }
                 } else {
-                    node.memberDocMismatch = (members.count, node.fields.count)
+                    node.memberDocMismatch = (members.count, expected)
                 }
             }
             nodes[id] = node
@@ -106,11 +112,19 @@ enum RequestDecoder {
                 ))
         }
         var fields: [SchemaField] = []
+        var enumerants: [SchemaEnumerant] = []
         if kind == 1 {
             let list = reader.pointerField(at: 3).list(of: .inlineComposite)
             for i in 0..<list.count { fields.append(try field(list.structure(at: i))) }
+        } else if kind == 2 {
+            // Node.enum.enumerants (pointer 3) is in ordinal order; Enumerant.name is pointer 0.
+            let list = reader.pointerField(at: 3).list(of: .inlineComposite)
+            for i in 0..<list.count {
+                enumerants.append(
+                    SchemaEnumerant(name: string(list.structure(at: i).pointerField(at: 0).text())))
+            }
         }
-        return SchemaNode(
+        var node = SchemaNode(
             id: reader.data(at: 0, default: UInt64(0)),
             scope: reader.data(at: 2, default: UInt64(0)), kind: kind, nested: nested,
             generic: reader.data(at: 288, default: false),
@@ -119,6 +133,8 @@ enum RequestDecoder {
             discriminantOffset: kind == 1 ? Int(reader.data(at: 8, default: UInt32(0))) : 0,
             dataWords: kind == 1 ? reader.data(at: 7, default: UInt16(0)) : 0,
             pointerCount: kind == 1 ? reader.data(at: 12, default: UInt16(0)) : 0)
+        node.enumerants = enumerants
+        return node
     }
 
     static func field(_ reader: borrowing StructReader) throws -> SchemaField {
@@ -168,6 +184,12 @@ enum RequestDecoder {
                 unsupportedDefault = value.pointerField(at: 0).list(of: size).count != 0
             }
             expression = ""
+        case .enumeration:
+            // Value.enum (discriminant 15) holds the default ordinal at data UInt16 1.
+            guard value.data(at: 0, default: UInt16(0)) == 15 else {
+                throw CompilerFailure("default type mismatch for \(name)")
+            }
+            expression = "UInt16(\(value.data(at: 1, default: UInt16(0))))"
         case .structure:
             guard value.data(at: 0, default: UInt16(0)) == 16 else {
                 throw CompilerFailure("default type mismatch for \(name)")
@@ -192,6 +214,7 @@ enum RequestDecoder {
         case 12: return .text
         case 13: return .data
         case 14: return .list(try type(reader.pointerField(at: 0).structure(), depth: depth + 1))
+        case 15: return .enumeration(reader.data(at: 1, default: UInt64(0)))
         case 16: return .structure(reader.data(at: 1, default: UInt64(0)))
         default: return .unsupported(kind)
         }
@@ -209,6 +232,7 @@ enum RequestDecoder {
             case .int64, .uint64, .float64: return .eightBytes
             }
         case .structure: return .inlineComposite
+        case .enumeration: return .twoBytes
         default: return .pointer
         }
     }

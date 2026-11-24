@@ -43,12 +43,21 @@ struct SwiftGenerator {
             ]
             lines += docLines(request.nodes[file.id]?.doc)
             lines += [availability, "public enum Capnp_\(String(file.id, radix: 16)) {"]
+            var names: Set<String> = []
             for node in children(of: file.id) {
-                guard node.kind == 1 else {
+                guard node.kind == 1 || node.kind == 2 else {
                     throw CompilerFailure(
                         "unsupported declaration kind \(node.kind) in \(file.filename)")
                 }
-                lines += try render(node, depth: 0, warnings: &warnings).map { "    " + $0 }
+                let name = try localName(node)
+                guard names.insert(name).inserted else {
+                    throw CompilerFailure("duplicate generated type name \(name)")
+                }
+                let rendered =
+                    node.kind == 2
+                    ? try renderEnum(node, depth: 0, warnings: &warnings)
+                    : try render(node, depth: 0, warnings: &warnings)
+                lines += rendered.map { "    " + $0 }
             }
             lines.append("}")
             output.append(GeneratedFile(path: path, contents: lines.joined(separator: "\n") + "\n"))
@@ -116,7 +125,7 @@ struct SwiftGenerator {
         return "\u{60}" + name + "\u{60}"
     }
 
-    private func localName(_ node: SchemaNode) throws -> String {
+    private func declaredName(_ node: SchemaNode) throws -> String {
         guard let parent = request.nodes[node.scope] else {
             throw CompilerFailure("missing scope for node \(node.id)")
         }
@@ -124,7 +133,12 @@ struct SwiftGenerator {
             parent.nested.first(where: { $0.id == node.id })?.name
             ?? parent.fields.first(where: { $0.groupID == node.id })?.name
         guard let name else { throw CompilerFailure("missing name for node \(node.id)") }
-        return try identifier(name + "Reader")
+        return name
+    }
+
+    // Struct and group readers take a `Reader` suffix; enums are values and keep their name.
+    private func localName(_ node: SchemaNode) throws -> String {
+        try identifier(declaredName(node) + (node.kind == 2 ? "" : "Reader"))
     }
 
     // Follow lexical scopes only, not field references: recursive structs are legal.
@@ -134,7 +148,7 @@ struct SwiftGenerator {
             throw CompilerFailure("missing or cyclic schema type \(id)")
         }
         if node.kind == 0 { return "Capnp_\(String(node.id, radix: 16))" }
-        guard node.kind == 1, !node.generic else {
+        guard node.kind == 1 && !node.generic || node.kind == 2 && depth == 0 else {
             throw CompilerFailure("referenced type \(id) is not a supported nongeneric struct")
         }
         return try qualifiedName(node.scope, depth: depth + 1) + "." + localName(node)
@@ -178,6 +192,10 @@ struct SwiftGenerator {
                 guard bits == 0 || field.offset < Int(node.dataWords) * 64 / bits else {
                     throw CompilerFailure("field offset exceeds struct data: \(field.name)")
                 }
+            case .enumeration:
+                guard field.offset < Int(node.dataWords) * 4 else {
+                    throw CompilerFailure("field offset exceeds struct data: \(field.name)")
+                }
             default:
                 guard field.offset < Int(node.pointerCount) else {
                     throw CompilerFailure(
@@ -201,7 +219,7 @@ struct SwiftGenerator {
         if let mismatch = node.memberDocMismatch {
             warnings.append(
                 "doc comments for node 0x\(String(node.id, radix: 16)) list \(mismatch.members) "
-                    + "members for \(mismatch.fields) fields; member comments dropped")
+                    + "members for \(mismatch.expected) fields; member comments dropped")
         }
         var lines = docLines(node.doc)
         lines += [
@@ -226,6 +244,10 @@ struct SwiftGenerator {
             ]
         }
         for field in node.fields {
+            if case .enumeration = field.type {
+                lines += try enumField(field, node: node)
+                continue
+            }
             let type = try swiftType(field.type)
             let reader =
                 field.discriminant == UInt16.max
@@ -260,11 +282,80 @@ struct SwiftGenerator {
         for child in children(of: node.id) {
             let childName = try localName(child)
             guard childNames.insert(childName).inserted else {
-                throw CompilerFailure("duplicate nested type \(childName)")
+                throw CompilerFailure("duplicate generated type name \(childName)")
             }
-            lines += try render(child, depth: depth + 1, warnings: &warnings).map { "    " + $0 }
+            let rendered =
+                child.kind == 2
+                ? try renderEnum(child, depth: depth + 1, warnings: &warnings)
+                : try render(child, depth: depth + 1, warnings: &warnings)
+            lines += rendered.map { "    " + $0 }
         }
         lines.append("}")
+        return lines
+    }
+
+    // Generated code names these unqualified (`UInt16(0)`, `CapnpRuntime.StructReader`), so an
+    // enum with one of these names would shadow them in its scope. `Type` and `Protocol` cannot
+    // be named through a qualified reference (`Outer.Type` is the metatype). capnp rejects
+    // underscores in names, so the `Capnp_` file namespaces cannot be shadowed.
+    private static let reservedEnumNames: Set<String> = [
+        "Void", "Bool", "Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64",
+        "Float", "Double", "Swift", "CapnpRuntime", "Type", "Protocol",
+    ]
+
+    // Checked here, at render time, and never in RequestDecoder: an imported file that is not
+    // generated may declare enums Swift cannot represent.
+    private func renderEnum(
+        _ node: SchemaNode, depth: Int, warnings: inout [String]
+    ) throws -> [String] {
+        guard depth < 64 else {
+            throw CompilerFailure("unsupported or excessively nested declaration \(node.id)")
+        }
+        let declared = try declaredName(node)
+        guard !node.enumerants.isEmpty else {
+            throw CompilerFailure(
+                "enum without enumerants is not representable in Swift: \(declared)")
+        }
+        guard !Self.reservedEnumNames.contains(declared) else {
+            throw CompilerFailure(
+                "enum name would shadow a Swift or CapnpRuntime name: \(declared)")
+        }
+        if let mismatch = node.memberDocMismatch {
+            warnings.append(
+                "doc comments for node 0x\(String(node.id, radix: 16)) list \(mismatch.members) "
+                    + "members for \(mismatch.expected) enumerants; member comments dropped")
+        }
+        var lines = docLines(node.doc)
+        lines += [
+            availability, "public enum \(try localName(node)): UInt16, CapnpRuntime.CapnpEnum {",
+        ]
+        for (ordinal, enumerant) in node.enumerants.enumerated() {
+            lines += docLines(enumerant.doc).map { "    " + $0 }
+            lines.append("    case \(try identifier(enumerant.name)) = \(ordinal)")
+        }
+        lines.append("}")
+        return lines
+    }
+
+    // `nil` from the getter means an ordinal this schema version does not know; the raw
+    // accessor (reserved `_capnp` prefix, so no schema name collides) still returns it, after
+    // the same XOR default as the getter.
+    private func enumField(_ field: SchemaField, node: SchemaNode) throws -> [String] {
+        let type = try swiftType(field.type)
+        let reader =
+            field.discriminant == UInt16.max
+            ? "_capnpReader"
+            : "_capnpReader.unionMember(at: \(node.discriminantOffset), equals: \(field.discriminant))"
+        let raw = "_capnpRaw_" + field.name
+        var lines = docLines(field.doc).map { "    " + $0 }
+        lines += [
+            "    public var \(try identifier(field.name)): \(type)? {",
+            "        \(type)(rawValue: \(raw))",
+            "    }",
+            "    public var \(raw): UInt16 {",
+            "        \(reader).data(at: \(field.offset), default: \(field.defaultExpression))",
+            "    }",
+        ]
         return lines
     }
 
@@ -273,11 +364,23 @@ struct SwiftGenerator {
         case .scalar(let scalar): return scalar.swift
         case .text: return "CapnpRuntime.TextReader"
         case .data: return "CapnpRuntime.DataReader"
-        case .structure(let id): return try qualifiedName(id)
+        case .structure(let id):
+            guard request.nodes[id]?.kind == 1 else {
+                throw CompilerFailure("referenced type \(id) is not a supported nongeneric struct")
+            }
+            return try qualifiedName(id)
+        case .enumeration(let id):
+            guard request.nodes[id]?.kind == 2 else {
+                throw CompilerFailure("referenced type \(id) is not an enum")
+            }
+            return try qualifiedName(id)
         case .list(let element):
             if case .scalar(.void) = element { return "CapnpRuntime.VoidList" }
             if case .scalar(let scalar) = element {
                 return "CapnpRuntime.PrimitiveList<\(scalar.swift)>"
+            }
+            if case .enumeration = element {
+                return "CapnpRuntime.EnumList<\(try swiftType(element))>"
             }
             return "CapnpRuntime.CapnpList<\(try swiftType(element))>"
         case .unsupported(let kind): throw CompilerFailure("unsupported field type \(kind)")
@@ -293,6 +396,7 @@ struct SwiftGenerator {
             let list = "\(pointer).list(of: .\(element.encoding))"
             if case .scalar(.void) = element { return "CapnpRuntime.VoidList(\(list))" }
             if case .scalar = element { return "CapnpRuntime.PrimitiveList(\(list))" }
+            if case .enumeration = element { return "CapnpRuntime.EnumList(\(list))" }
             return "CapnpRuntime.CapnpList(\(list))"
         default: throw CompilerFailure("expected a supported pointer field")
         }

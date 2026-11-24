@@ -36,6 +36,7 @@ and what's deliberately out of scope.
 - ``ListReader``
 - ``CapnpList``
 - ``PrimitiveList``
+- ``EnumList``
 - ``VoidList``
 - ``PointerReader``
 - ``TextReader``
@@ -50,6 +51,7 @@ Read messages through generated readers where you can.
 - ``CapnpStructReader``
 - ``CapnpListElement``
 - ``CapnpPrimitive``
+- ``CapnpEnum``
 - ``ElementSize``
 
 ### Limits and errors
