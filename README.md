@@ -15,13 +15,13 @@ introduction, including what changes on an Embedded Swift target.
 
 | Area | State |
 |---|---|
-| Reading messages — structs, lists, unions, groups, text/data, schema evolution | ✅ Implemented, conformance-tested against the C++ reference implementation |
+| Reading messages — structs, lists, unions, groups, text/data, schema evolution, unpacked and packed framing | ✅ Implemented, conformance-tested against the C++ reference implementation |
 | Code generation — `capnpc-swift` plugin binary and the SwiftPM build-tool plugin | ✅ Implemented and verified from a separate consumer package |
 | Embedded Swift / allocation-free runtime | ✅ Verified: `-no-allocations` compile, allocator-symbol audit, negative control, and 0 `unsafe` expressions under strict memory safety |
-| macOS and Linux (glibc) host execution | ✅ Verified in CI (31 runtime tests at 98.7% line coverage, C++ oracle conformance, 25 compile-fail fixtures, output-boundary hardening) |
-| ARMv7E-M bare metal | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`5,358 B` flash / `10,876 B` ELF on 6.4.2; `4,955 B` flash / `9,740 B` ELF on `main-2026-11-01`); not yet run on physical hardware |
-| RISC-V 32-bit bare metal (`rv32imac` / ESP32-C6) | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`6,812 B` flash / `14,612 B` ELF on 6.4.2; `6,405 B` flash / `19,056 B` ELF on `main-2026-11-01`); not yet run on physical hardware |
-| WebAssembly / WASI | ✅ Full and Embedded Swift run all 9 aligned + 2 unaligned C++ oracle messages plus 8 32-bit overflow/clamping/malformed edge checks under WasmKit; Embedded allocation freedom checked by call-graph analysis |
+| macOS and Linux (glibc) host execution | ✅ Verified in CI (48 runtime tests at 97.2% line coverage, C++ oracle conformance, 25 compile-fail fixtures, output-boundary hardening) |
+| ARMv7E-M bare metal | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`7,006 B` flash / `13,244 B` ELF on 6.4.2; `6,451 B` flash / `11,816 B` ELF on `main-2026-11-01`, including the packed unpacker); not yet run on physical hardware |
+| RISC-V 32-bit bare metal (`rv32imac` / ESP32-C6) | 🟡 Compiles, passes allocation-freedom checks, and links against `ci/firmware/stubs.c` only (`8,836 B` flash / `17,864 B` ELF on 6.4.2; `8,239 B` flash / `23,492 B` ELF on `main-2026-11-01`, including the packed unpacker); not yet run on physical hardware |
+| WebAssembly / WASI | ✅ Full and Embedded Swift run all 9 aligned + 2 unaligned C++ oracle messages, the same 9 packed, plus 8 32-bit overflow/clamping/malformed edge checks and 5 packed ones under WasmKit; Embedded allocation freedom checked by call-graph analysis |
 | Static Linux (musl) | 🟡 Verified locally on Swift 6.4.2 (`aarch64` native Linux `FROM scratch`, `x86_64` Rosetta-emulated `FROM scratch`); static ELF audit + 9/9 oracle messages pass; native `x86_64` Linux hardware pending |
 | Embedded builds with full debug info (`-g`) | 🟡 Fixed on Swift `main` (`main-snapshot-2026-11-01`); Swift 6.4.0–6.4.2 releases still need `-gline-tables-only` — see *Embedded debug info* below |
 | Writing or mutating messages (builders) | ⬜ Not implemented — planned for v2 |
@@ -129,7 +129,33 @@ without an error in v1; `PointerReader.isNull` still tests the literal wire null
 and 512 segments. Repeated pointer reads, including through copied views, consume
 the shared budget. Lists of zero-sized elements consume virtual words to prevent
 amplification. `consumedByteCount` identifies the first frame when bytes contain
-concatenated messages. Packed streams must be unpacked before calling the runtime.
+concatenated messages.
+
+Packed messages are unpacked one frame at a time into storage you provide, then read as
+usual. The runtime still does not allocate: an Embedded target can unpack into a static
+or stack `InlineArray`.
+
+```swift
+func readPackedID(_ packed: [UInt8]) -> UInt64? {
+    var storage = InlineArray<512, UInt64>(repeating: 0)  // 4 KiB of output
+    var words = storage.mutableSpan
+    var output = words.mutableBytes
+    guard let (consumed, written) = Packed.unpackFrame(packed.span.bytes, into: &output)
+    else { return nil }  // malformed, truncated, over the limits, or too large for 4 KiB
+    _ = consumed  // the next packed frame, if any, starts here
+    let arena = Arena(framedBytes: output.bytes.extracting(0..<written))
+    let id = arena.withRoot { Capnp_9eb32e19f86f3a01.ExampleReader($0).child.id }
+    let error = arena.error
+    return error == .none ? id : nil
+}
+```
+
+`Packed.unpackedFrameByteCount` walks the same frame without writing, to size the
+output first. Both reject a frame whose total segment size exceeds
+`ReaderOptions.traversalLimitWords` or whose segment count exceeds `segmentLimit`, before
+walking its body, so a few packed bytes cannot make the unpacker write more than you
+allowed. Zero and literal runs may cross the segment table and segment boundaries, but
+not the end of the frame.
 
 Lists expose `count` and indexed access (`for i in 0..<list.count`) through
 `PrimitiveList<Element>`, `EnumList<Element>`, `VoidList`, and unified generic
@@ -155,7 +181,8 @@ Float constants are written by bit pattern, so NaN, infinities and `-0.0` are ex
 
 ## Supported scope
 
-- Standard unpacked framing, multiple segments, single- and double-far pointers.
+- Standard framing, unpacked or packed (`Packed.unpackFrame` into caller storage),
+  multiple segments, single- and double-far pointers.
 - Void, Bool, all signed/unsigned 8/16/32/64-bit integers, Float32/64, Text, Data,
   structs, nested structs, enums, lists (including lists of lists), groups, and unions.
 - Scalar XOR defaults, empty pointer defaults, missing-field defaults, compatible
@@ -175,7 +202,7 @@ represent: an enum without enumerants, and an enum named `Void`, `Swift`,
 `CapnpRuntime`, `Type`, `Protocol` or a scalar type name such as `UInt16`, which would
 shadow names the generated code uses. Two generated types with the same Swift name in one
 scope (struct `E` and enum `EReader`) are diagnosed too. An unused interface in an imported
-file does not block generation. No builders, RPC, packed-stream decoder,
+file does not block generation. No builders, RPC, incremental (streaming) packed decoder,
 public async API, or Sendable arena is provided. Apple targets require OS 27 (macOS,
 iOS, watchOS, tvOS, visionOS), where SE-0525's safe `RawSpan` loads are available.
 Non-Apple targets have no OS availability gate.
@@ -232,12 +259,12 @@ reference generated from doc comments.
 
 | Target | Verified with Swift 6.4.0 / 6.4.2 (and `main-2026-11-01` locally) | Remaining validation |
 |---|---|---|
-| macOS host | 31 runtime tests (98.7% line coverage), generator + output-boundary hardening, C++ fixtures, 25 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
+| macOS host | 48 runtime tests (97.2% line coverage), generator + output-boundary hardening, C++ fixtures, 25 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
 | Linux x86-64 (glibc) | Host execution, strict `swift format` lint, and Embedded object checks in CI | Additional architectures and distributions |
-| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`5,358 B` flash / `10,876 B` ELF on 6.4.2; `4,955 B` flash / `9,740 B` ELF on `main-2026-11-01` with PAL `_swift_deallocate` negative-control rejection, zero atomic stubs) | Device or QEMU execution |
-| RISC-V 32-bit bare metal (`rv32imac`) | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`6,812 B` flash / `14,612 B` ELF on 6.4.2; `6,405 B` flash / `19,056 B` ELF on `main-2026-11-01`, zero atomic stubs) | Real hardware (e.g. ESP32-C6) execution |
+| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`7,006 B` flash / `13,244 B` ELF on 6.4.2; `6,451 B` flash / `11,816 B` ELF on `main-2026-11-01`, including the packed unpacker with PAL `_swift_deallocate` negative-control rejection, zero atomic stubs) | Device or QEMU execution |
+| RISC-V 32-bit bare metal (`rv32imac`) | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`8,836 B` flash / `17,864 B` ELF on 6.4.2; `8,239 B` flash / `23,492 B` ELF on `main-2026-11-01`, including the packed unpacker, zero atomic stubs) | Real hardware (e.g. ESP32-C6) execution |
 | Static Linux SDK (musl) | Verified locally with Swift 6.4.2 (`swift-6.4.2-RELEASE_static-linux-0.1.0`, musl 1.2.5): `aarch64` and `x86_64` statically linked ELF executables (`INTERP`/`DYNAMIC`/`NEEDED` absent) run all 9 C++ oracle messages + wrong-mode negative control in `FROM scratch` Linux containers (`aarch64` native arm64 Linux, `x86_64` Rosetta-emulated on Apple Silicon); SwiftPM `--swift-sdk` builds `CapnpRuntime` cleanly (SDK ships no `Testing` module). Full-Swift static binaries allocate; this is separate from `-no-allocations` | Native `x86_64` Linux hardware execution |
-| WebAssembly / WASI | Full and Embedded builds run all 9 aligned + 2 unaligned (`+1`/`+3` byte shifted) C++ oracle messages plus 8 32-bit edge checks (single/double-far `Int32.max` overflow guards, `signedOffsetWords` overflow, `Atomic<UInt>` budget clamping, amplification, unaligned `UTF8Span`, malformed frame/UTF-8) under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
+| WebAssembly / WASI | Full and Embedded builds run all 9 aligned + 2 unaligned (`+1`/`+3` byte shifted) C++ oracle messages and the same 9 packed, plus 8 32-bit edge checks (single/double-far `Int32.max` overflow guards, `signedOffsetWords` overflow, `Atomic<UInt>` budget clamping, amplification, unaligned `UTF8Span`, malformed frame/UTF-8) and 5 packed ones (hostile segment tables past a 32-bit `Int`, amplification bounded by the output, a segment-crossing run) under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
 
 Snapshot or vendor compilers reporting a newer Swift version are not automatically
 qualified by these results. Static linking, Embedded mode and allocation freedom are

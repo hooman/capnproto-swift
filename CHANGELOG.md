@@ -10,6 +10,16 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+### Added
+
+- `CapnpRuntime` reads packed messages. `Packed.unpackFrame(_:into:options:)` unpacks
+  exactly one packed frame into a caller-provided `MutableRawSpan` and returns the packed
+  bytes consumed and the bytes written; open `Arena(framedBytes:)` over the written
+  prefix. `Packed.unpackedFrameByteCount(_:options:)` returns the size without writing.
+  Neither allocates. A frame whose segment sizes exceed `traversalLimitWords`, whose
+  segment count exceeds `segmentLimit`, or that does not fit the output is rejected
+  before its body is unpacked.
+
 ## [0.2.0] - 2026-11-23
 
 Readers-only schema completeness: the generator now accepts annotations, doc comments,
