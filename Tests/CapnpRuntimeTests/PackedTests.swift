@@ -1,9 +1,10 @@
 // Hand-packed frames with their expected results, written before the unpacker (answer key).
 // The packed bytes are typed out tag by tag; the expected unpacked bytes come from
 // `frame(_:)`, which builds the standard segment table independently of any packer.
-// `capnp encode --packed` never emits runs that cross the segment table, the table/body
-// boundary or a segment boundary, so the C++ oracle in ci/check-readers.py cannot cover
-// those cases; they are proven here. 32-bit overflow cases run in ci/fixtures/wasi.
+// `capnp encode --packed` never emits runs that cross the table/body boundary or a segment
+// boundary (C++ writeMessage packs the table and each segment as separate pieces, upstream
+// 851c45b), so the C++ oracle in ci/check-readers.py cannot cover those cases; they are
+// proven here. 32-bit overflow cases run in ci/fixtures/wasi.
 
 import Testing
 

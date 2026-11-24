@@ -34,8 +34,10 @@ disagree. The unpacker decodes the segment table first, checks the count against
 the output before it walks the body. Runs may cross the table/body and segment boundaries;
 a run still pending at the frame's last word is malformed, because no packed offset exists
 where the next frame could start. C++ rejects runs that cross its separate reads of the
-first word, the rest of the table, and the body; no encoder emits them, so accepting
-them only widens what this reader tolerates. Words are assembled from two `UInt32` halves:
+first word, the rest of the table, and the body. The C++ writer never emits them:
+`writeMessage` passes the table and each segment as separate pieces, and
+`PackedOutputStream` packs each piece on its own (upstream `851c45b`). Accepting them only
+widens what this reader tolerates. Words are assembled from two `UInt32` halves:
 a variable `UInt64` shift needs `__aeabi_llsl`, which the bare-metal link does not provide.
 
 `RawPointer` decodes the pointer word; `PointerReader` follows offsets and validates
