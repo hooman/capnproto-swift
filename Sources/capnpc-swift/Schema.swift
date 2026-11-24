@@ -61,6 +61,16 @@ struct SchemaEnumerant {
     var doc: String? = nil
 }
 
+// Const nodes (kind 4). Only the value's discriminant and its scalar expression or enum
+// ordinal are kept; the generator diagnoses deferred types and mismatches at render time, so
+// an imported file that is not generated may hold any constant.
+struct SchemaConstant {
+    let type: FieldType
+    let valueKind: UInt16
+    let expression: String
+    let ordinal: UInt16
+}
+
 struct SchemaNode {
     let id: UInt64
     let scope: UInt64
@@ -75,6 +85,7 @@ struct SchemaNode {
     let pointerCount: UInt16
     // Enum nodes (kind 2) only, in ordinal order: an enumerant's ordinal is its index.
     var enumerants: [SchemaEnumerant] = []
+    var constant: SchemaConstant? = nil
     var doc: String? = nil
     // Set when sourceInfo lists a different number of members than the struct has fields or
     // the enum has enumerants; member docs are dropped and the generator warns if it renders
