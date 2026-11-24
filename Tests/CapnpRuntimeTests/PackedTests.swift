@@ -146,8 +146,11 @@ struct PackedTests {
         #expect(result?.consumed == 6 && result?.written == 24)
         let written = result?.written ?? 0
         let arena = Arena(framedBytes: raw.bytes.extracting(0..<written))
-        #expect(arena.withRoot { $0.data(at: 0, default: UInt64(0)) } == 7)
-        #expect(arena.error == .none && arena.consumedByteCount == 24)
+        // #expect cannot capture the nonescapable arena; read its results first.
+        let value = arena.withRoot { $0.data(at: 0, default: UInt64(0)) }
+        let error = arena.error
+        let consumed = arena.consumedByteCount
+        #expect(value == 7 && error == .none && consumed == 24)
     }
 
     // MARK: Runs past the end of the frame

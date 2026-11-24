@@ -212,13 +212,13 @@ func verify32BitEdges() -> Int {
     return 8
 }
 
-/// Both packed entry points reject `packed`, the unpack into a 512-byte output.
-func expectPackedMalformed(_ packed: RawSpan, options: ReaderOptions, _ message: StaticString) {
-    precondition(Packed.unpackedFrameByteCount(packed, options: options) == nil, message)
+/// Whether both packed entry points reject `packed`, the unpack into a 512-byte output.
+func packedRejected(_ packed: RawSpan, options: ReaderOptions) -> Bool {
+    guard Packed.unpackedFrameByteCount(packed, options: options) == nil else { return false }
     var storage = InlineArray<64, UInt64>(repeating: 0)
     var words = storage.mutableSpan
     var output = words.mutableBytes
-    precondition(Packed.unpackFrame(packed, into: &output, options: options) == nil, message)
+    return Packed.unpackFrame(packed, into: &output, options: options) == nil
 }
 
 /// Copy `bytes` into `input` at `offset`; returns the offset after them.
@@ -242,39 +242,47 @@ func verify32BitPacked() -> Int {
     input[n] = 254
     n += 1 + 254 * 8
     n = put([0x0F, 0xFF, 0xFF, 0xFF, 0xFF], into: &input, at: n)
-    expectPackedMalformed(
-        input.span.bytes.extracting(0..<n),
-        options: ReaderOptions(traversalLimitWords: .max, segmentLimit: 512),
+    precondition(
+        packedRejected(
+            input.span.bytes.extracting(0..<n),
+            options: ReaderOptions(traversalLimitWords: .max, segmentLimit: 512)),
         "512 maximal segments must be rejected without overflow")
 
     // 2. count-1 = 0xFFFFFFFF: 2^32 segments, more than even segmentLimit = UInt32.max.
     n = put([0x0F, 0xFF, 0xFF, 0xFF, 0xFF], into: &input, at: 0)
-    expectPackedMalformed(
-        input.span.bytes.extracting(0..<n), options: unlimited,
+    precondition(
+        packedRejected(input.span.bytes.extracting(0..<n), options: unlimited),
         "2^32 segments must be rejected without overflow")
 
     // 3. One segment of 0xFFFFFFFF words (32 GiB), then eight 256-word zero runs.
     n = put([0xF0, 0xFF, 0xFF, 0xFF, 0xFF], into: &input, at: 0)
     for _ in 0..<8 { n = put([0x00, 0xFF], into: &input, at: n) }
-    expectPackedMalformed(
-        input.span.bytes.extracting(0..<n), options: unlimited,
+    precondition(
+        packedRejected(input.span.bytes.extracting(0..<n), options: unlimited),
         "a 32 GiB segment must be rejected without overflow")
 
     // 4. Amplification: 11 bytes expand to 1,000 zero words. The size query reports
     // 8,008 bytes; a 512-byte output is rejected and an 8 KiB one holds the frame.
-    n = put(
-        [0x30, 0xE8, 0x03, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xE7], into: &input, at: 0)
-    let zeros = input.span.bytes.extracting(0..<n)
-    precondition(Packed.unpackedFrameByteCount(zeros) == 8008, "amplified size query")
-    expectPackedMalformed(zeros, options: ReaderOptions(), "512 bytes cannot hold 8,008")
-    var large = InlineArray<1024, UInt64>(repeating: 0xA5A5)
-    var largeWords = large.mutableSpan
-    var largeOutput = largeWords.mutableBytes
-    let amplified = Packed.unpackFrame(zeros, into: &largeOutput)
-    precondition(amplified?.consumed == n && amplified?.written == 8008, "amplified unpack")
-    let arena = Arena(framedBytes: largeOutput.bytes.extracting(0..<8008))
-    arena.withRoot { root in precondition(root.data(at: 0, default: UInt32(3)) == 3) }
-    precondition(arena.error == .none, "amplified frame must open")
+    do {
+        n = put(
+            [0x30, 0xE8, 0x03, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xE7], into: &input, at: 0)
+        let zeros = input.span.bytes.extracting(0..<n)
+        precondition(Packed.unpackedFrameByteCount(zeros) == 8008, "amplified size query")
+        var small = InlineArray<64, UInt64>(repeating: 0)
+        var smallWords = small.mutableSpan
+        var smallOutput = smallWords.mutableBytes
+        precondition(
+            Packed.unpackFrame(zeros, into: &smallOutput) == nil, "512 bytes cannot hold 8,008")
+        var large = InlineArray<1024, UInt64>(repeating: 0xA5A5)
+        var largeWords = large.mutableSpan
+        var largeOutput = largeWords.mutableBytes
+        let amplified = Packed.unpackFrame(zeros, into: &largeOutput)
+        precondition(amplified?.consumed == n && amplified?.written == 8008, "amplified unpack")
+        let arena = Arena(framedBytes: largeOutput.bytes.extracting(0..<8008))
+        arena.withRoot { root in precondition(root.data(at: 0, default: UInt32(3)) == 3) }
+        let error = arena.error  // read first: precondition's autoclosure cannot capture it
+        precondition(error == .none, "amplified frame must open")
+    }
 
     // 5. A zero run crossing a segment boundary decodes on 32-bit and writes exactly
     // the frame: two table words and two zero body words.
