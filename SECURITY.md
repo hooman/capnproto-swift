@@ -19,7 +19,7 @@
 ## Supported Versions
 
 Security fixes land on `main` and ship in a new patch release of the latest minor version
-(currently `0.2.x`). Earlier minor versions are not maintained while the version is `0.x`.
+(currently `0.3.x`). Earlier minor versions are not maintained while the version is `0.x`.
 
 ## Reporting a Vulnerability
 

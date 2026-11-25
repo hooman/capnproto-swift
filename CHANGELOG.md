@@ -10,6 +10,11 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-25
+
+Packed framing: the runtime now reads packed messages, one frame at a time into storage
+the caller provides, without allocating. The generator is unchanged.
+
 ### Added
 
 - `CapnpRuntime` reads packed messages. `Packed.unpackFrame(_:into:options:)` unpacks
@@ -19,6 +24,12 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   Neither allocates. A frame whose segment sizes exceed `traversalLimitWords`, whose
   segment count exceeds `segmentLimit`, or that does not fit the output is rejected
   before its body is unpacked.
+
+### Not yet supported
+
+- Builders (writing messages), RPC and interfaces, generics, AnyPointer, text, data,
+  struct, list and AnyPointer constants, non-empty pointer defaults, and incremental
+  (streaming) packed decoding.
 
 ## [0.2.0] - 2026-11-23
 

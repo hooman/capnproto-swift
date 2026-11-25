@@ -4,7 +4,7 @@ Native Swift readers for [Cap’n Proto](https://capnproto.org), with a host cod
 generator and an allocation-free Embedded Swift runtime. Requires Swift 6.4+
 and, on Apple platforms, OS 27. The package is a test bed for current Swift
 system-programming features and does not back-deploy. Readers-only v1 is released as
-`0.2.0`; see [CHANGELOG.md](CHANGELOG.md).
+`0.3.0`; see [CHANGELOG.md](CHANGELOG.md).
 
 New to Cap'n Proto, or coming from Protocol Buffers? See **Why Cap'n Proto** and the
 **Getting Started** tutorial in this package's DocC documentation (`swift package
@@ -26,7 +26,7 @@ introduction, including what changes on an Embedded Swift target.
 | Embedded builds with full debug info (`-g`) | 🟡 Fixed on Swift `main` (`main-snapshot-2026-11-01`); Swift 6.4.0–6.4.2 releases still need `-gline-tables-only` — see *Embedded debug info* below |
 | Writing or mutating messages (builders) | ⬜ Not implemented — planned for v2 |
 | RPC / capabilities | ⬜ Out of scope for this project |
-| Tagged release | ✅ `0.2.0` — see [CHANGELOG.md](CHANGELOG.md) |
+| Tagged release | ✅ `0.3.0` — see [CHANGELOG.md](CHANGELOG.md) |
 
 ✅ verified with evidence in CI or this README &nbsp;·&nbsp; 🟡 partially verified, gap noted
 &nbsp;·&nbsp; ⬜ not yet done. See **Supported scope** and **Platform evidence** below for
@@ -41,7 +41,7 @@ compatibility, so pin to the minor version:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/hooman/capnproto-swift", .upToNextMinor(from: "0.2.0"))
+    .package(url: "https://github.com/hooman/capnproto-swift", .upToNextMinor(from: "0.3.0"))
 ]
 ```
 
