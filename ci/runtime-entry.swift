@@ -31,3 +31,21 @@ public func capnpEmbeddedProbe(_ pointer: UnsafeRawPointer, _ count: Int) -> UIn
     }
     return result &+ widen(arena.error.rawValue)
 }
+
+/// Unpack one packed frame into caller storage, then run the same reader probe over the
+/// bytes written. Returns UInt64.max if the frame does not unpack or the size query
+/// disagrees, so the firmware link and the allocation audits cover `Packed` too.
+@c(capnp_embedded_packed_probe)
+public func capnpEmbeddedPackedProbe(
+    _ packed: UnsafeRawPointer, _ count: Int, _ output: UnsafeMutableRawPointer, _ capacity: Int
+) -> UInt64 {
+    let input = unsafe RawSpan(_unsafeBytes: UnsafeRawBufferPointer(start: packed, count: count))
+    var storage = unsafe MutableRawSpan(
+        _unsafeBytes: UnsafeMutableRawBufferPointer(start: output, count: capacity))
+    let size = Packed.unpackedFrameByteCount(input)
+    guard let (_, written) = Packed.unpackFrame(input, into: &storage), size == written else {
+        return .max
+    }
+    _ = consume storage
+    return unsafe capnpEmbeddedProbe(UnsafeRawPointer(output), written)
+}

@@ -29,6 +29,7 @@ and what's deliberately out of scope.
 - <doc:WhyCapnProto>
 - <doc:GettingStarted>
 - ``Arena``
+- ``Packed``
 
 ### Reading a message
 

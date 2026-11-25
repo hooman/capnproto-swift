@@ -8,7 +8,27 @@ import CapnpRuntime
 @c(verify_readers)
 public func verifyReaders(_ pointer: UnsafeRawPointer, _ count: Int, _ mode: Int32) -> UInt64 {
     let raw = unsafe UnsafeRawBufferPointer(start: pointer, count: count)
-    let arena = Arena(framedBytes: unsafe RawSpan(_unsafeBytes: raw))
+    return verify(Arena(framedBytes: unsafe RawSpan(_unsafeBytes: raw)), mode)
+}
+
+/// Unpack one packed frame into fixed storage, as an Embedded caller would, then run the
+/// same assertions. The whole input must be exactly one frame.
+@c(verify_packed)
+public func verifyPacked(_ pointer: UnsafeRawPointer, _ count: Int, _ mode: Int32) -> UInt64 {
+    let raw = unsafe UnsafeRawBufferPointer(start: pointer, count: count)
+    let packed = unsafe RawSpan(_unsafeBytes: raw)
+    var storage = InlineArray<1024, UInt64>(repeating: 0)
+    var words = storage.mutableSpan
+    var output = words.mutableBytes
+    let size = Packed.unpackedFrameByteCount(packed)
+    guard let (consumed, written) = Packed.unpackFrame(packed, into: &output) else {
+        preconditionFailure("packed oracle message failed to unpack")
+    }
+    precondition(consumed == count && size == written)
+    return verify(Arena(framedBytes: output.bytes.extracting(0..<written)), mode)
+}
+
+func verify(_ arena: borrowing Arena, _ mode: Int32) -> UInt64 {
     let sum = arena.withRoot { root -> UInt64 in
         if mode == 2 {
             let new = Capnp_9eb32e19f86f3a01.NewReader(root.borrowed())

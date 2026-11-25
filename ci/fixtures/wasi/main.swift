@@ -1,7 +1,8 @@
 // WASI driver for the shared fixture assertions and 32-bit runtime edge tests; builds as
 // full Swift and as Embedded Swift. stdin carries an 8-byte prefix: byte 0 is the mode
-// (0/1/2 = oracle verifyReaders, 99 = 32-bit overflow/clamping/malformed/unaligned suite),
-// byte 1 is an optional 0...7 byte unalignment shift for the message buffer. A failed
+// (0/1/2 = oracle verifyReaders, 98 = 32-bit packed suite, 99 = 32-bit overflow/clamping/
+// malformed/unaligned suite), byte 1 is an optional 0...7 byte unalignment shift for the
+// message buffer, and a nonzero byte 2 marks the message as packed. A failed
 // precondition traps, so the runner's exit status reports assertion failures.
 
 import CapnpRuntime
@@ -9,7 +10,7 @@ import WASILibc
 
 nonisolated(unsafe) var buffer = InlineArray<1024, UInt64>(repeating: 0)
 
-func readInput() -> (mode: Int32, shift: Int, count: Int) {
+func readInput() -> (mode: Int32, shift: Int, packed: Bool, count: Int) {
     var total = 0
     unsafe withUnsafeMutableBytes(of: &buffer) { raw in
         while total < raw.count {
@@ -19,11 +20,11 @@ func readInput() -> (mode: Int32, shift: Int, count: Int) {
         }
     }
     precondition(total >= 8 && total < 1024 * 8, "message missing or too large")
-    let (mode, shift) = unsafe withUnsafeBytes(of: &buffer) { raw in
-        (Int32(raw[0]), Int(raw[1]))
+    let (mode, shift, packed) = unsafe withUnsafeBytes(of: &buffer) { raw in
+        (Int32(raw[0]), Int(raw[1]), raw[2] != 0)
     }
     precondition(shift >= 0 && shift < 8 && total >= 8 + shift, "invalid shift")
-    return (mode, shift, total - 8 - shift)
+    return (mode, shift, packed, total - 8 - shift)
 }
 
 func structWord(_ offset: Int32 = 0, data: UInt16 = 0, pointers: UInt16 = 0) -> UInt64 {
@@ -211,14 +212,109 @@ func verify32BitEdges() -> Int {
     return 8
 }
 
+/// Whether both packed entry points reject `packed`, the unpack into a 512-byte output.
+func packedRejected(_ packed: RawSpan, options: ReaderOptions) -> Bool {
+    guard Packed.unpackedFrameByteCount(packed, options: options) == nil else { return false }
+    var storage = InlineArray<64, UInt64>(repeating: 0)
+    var words = storage.mutableSpan
+    var output = words.mutableBytes
+    return Packed.unpackFrame(packed, into: &output, options: options) == nil
+}
+
+/// Copy `bytes` into `input` at `offset`; returns the offset after them.
+func put<let N: Int>(
+    _ bytes: InlineArray<N, UInt8>, into input: inout InlineArray<2304, UInt8>, at offset: Int
+) -> Int {
+    for i in 0..<N { input[offset + i] = bytes[i] }
+    return offset + N
+}
+
+func verify32BitPacked() -> Int {
+    precondition(Int.bitWidth == 32, "expected 32-bit platform")
+    let unlimited = ReaderOptions(traversalLimitWords: .max, segmentLimit: .max)
+    var input = InlineArray<2304, UInt8>(repeating: 0xFF)
+
+    // 1. 512 segments of 0xFFFFFFFF words: 2^41 words, far past a 32-bit Int in bytes.
+    // Table word 0 (count-1 = 511, size 0xFFFFFFFF), then a 0xFF literal word whose run
+    // copies 254 all-0xFF words, then the last size plus padding. No body follows.
+    var n = put([0xF3, 0xFF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF], into: &input, at: 0)
+    n += 9  // 0xFF tag and eight 0xFF bytes (the buffer is prefilled with 0xFF)
+    input[n] = 254
+    n += 1 + 254 * 8
+    n = put([0x0F, 0xFF, 0xFF, 0xFF, 0xFF], into: &input, at: n)
+    precondition(
+        packedRejected(
+            input.span.bytes.extracting(0..<n),
+            options: ReaderOptions(traversalLimitWords: .max, segmentLimit: 512)),
+        "512 maximal segments must be rejected without overflow")
+
+    // 2. count-1 = 0xFFFFFFFF: 2^32 segments, more than even segmentLimit = UInt32.max.
+    n = put([0x0F, 0xFF, 0xFF, 0xFF, 0xFF], into: &input, at: 0)
+    precondition(
+        packedRejected(input.span.bytes.extracting(0..<n), options: unlimited),
+        "2^32 segments must be rejected without overflow")
+
+    // 3. One segment of 0xFFFFFFFF words (32 GiB), then eight 256-word zero runs.
+    n = put([0xF0, 0xFF, 0xFF, 0xFF, 0xFF], into: &input, at: 0)
+    for _ in 0..<8 { n = put([0x00, 0xFF], into: &input, at: n) }
+    precondition(
+        packedRejected(input.span.bytes.extracting(0..<n), options: unlimited),
+        "a 32 GiB segment must be rejected without overflow")
+
+    // 4. Amplification: 11 bytes expand to 1,000 zero words. The size query reports
+    // 8,008 bytes; a 512-byte output is rejected and an 8 KiB one holds the frame.
+    do {
+        n = put(
+            [0x30, 0xE8, 0x03, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xE7], into: &input, at: 0)
+        let zeros = input.span.bytes.extracting(0..<n)
+        precondition(Packed.unpackedFrameByteCount(zeros) == 8008, "amplified size query")
+        var small = InlineArray<64, UInt64>(repeating: 0)
+        var smallWords = small.mutableSpan
+        var smallOutput = smallWords.mutableBytes
+        precondition(
+            Packed.unpackFrame(zeros, into: &smallOutput) == nil, "512 bytes cannot hold 8,008")
+        var large = InlineArray<1024, UInt64>(repeating: 0xA5A5)
+        var largeWords = large.mutableSpan
+        var largeOutput = largeWords.mutableBytes
+        let amplified = Packed.unpackFrame(zeros, into: &largeOutput)
+        precondition(amplified?.consumed == n && amplified?.written == 8008, "amplified unpack")
+        let arena = Arena(framedBytes: largeOutput.bytes.extracting(0..<8008))
+        arena.withRoot { root in precondition(root.data(at: 0, default: UInt32(3)) == 3) }
+        let error = arena.error  // read first: precondition's autoclosure cannot capture it
+        precondition(error == .none, "amplified frame must open")
+    }
+
+    // 5. A zero run crossing a segment boundary decodes on 32-bit and writes exactly
+    // the frame: two table words and two zero body words.
+    n = put([0x11, 0x01, 0x01, 0x01, 0x01, 0x00, 0x01], into: &input, at: 0)
+    var storage = InlineArray<8, UInt64>(repeating: 0xA5A5)
+    let crossing: (consumed: Int, written: Int)?
+    do {
+        var words = storage.mutableSpan
+        var output = words.mutableBytes
+        crossing = Packed.unpackFrame(input.span.bytes.extracting(0..<n), into: &output)
+    }
+    precondition(crossing?.consumed == 7 && crossing?.written == 32, "segment-crossing run")
+    precondition(storage[2] == 0 && storage[3] == 0 && storage[4] == 0xA5A5)
+
+    return 5
+}
+
 let input = readInput()
 if input.mode == 99 {
     let checks = verify32BitEdges()
     print("PASS mode=99 checks=\(checks)")
+} else if input.mode == 98 {
+    let checks = verify32BitPacked()
+    print("PASS mode=98 checks=\(checks)")
 } else {
     precondition(input.count > 0, "message missing")
     let checksum = unsafe withUnsafeBytes(of: &buffer) { raw in
-        unsafe verifyReaders(raw.baseAddress! + 8 + input.shift, input.count, input.mode)
+        let start = unsafe raw.baseAddress! + 8 + input.shift
+        return input.packed
+            ? unsafe verifyPacked(start, input.count, input.mode)
+            : unsafe verifyReaders(start, input.count, input.mode)
     }
-    print("PASS mode=\(input.mode) shift=\(input.shift) checksum=\(checksum)")
+    let kind = input.packed ? " packed" : ""
+    print("PASS\(kind) mode=\(input.mode) shift=\(input.shift) checksum=\(checksum)")
 }

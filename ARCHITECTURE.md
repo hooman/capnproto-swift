@@ -25,6 +25,21 @@ scans that table without allocating an index; the configurable segment-count cap
 bounds lookup work. The implementation accepts trailing bytes and reports the
 first frame’s byte count. `Arena(bytes:)` accepts one unframed segment.
 
+`Packed` unpacks one packed frame into a caller-provided `MutableRawSpan`; the caller then
+opens `Arena(framedBytes:)` over the bytes written. One word producer (`PackedWords`)
+serves both `unpackFrame` and the size query `unpackedFrameByteCount`, so they cannot
+disagree. The unpacker decodes the segment table first, checks the count against
+`segmentLimit`, sums the 32-bit sizes in `UInt64`, and rejects a frame over
+`traversalLimitWords` (as C++ `InputStreamMessageReader` does) or too large for `Int` or
+the output before it walks the body. Runs may cross the table/body and segment boundaries;
+a run still pending at the frame's last word is malformed, because no packed offset exists
+where the next frame could start. C++ rejects runs that cross its separate reads of the
+first word, the rest of the table, and the body. The C++ writer never emits them:
+`writeMessage` passes the table and each segment as separate pieces, and
+`PackedOutputStream` packs each piece on its own (upstream `851c45b`). Accepting them only
+widens what this reader tolerates. Words are assembled from two `UInt32` halves:
+a variable `UInt64` shift needs `__aeabi_llsl`, which the bare-metal link does not provide.
+
 `RawPointer` decodes the pointer word; `PointerReader` follows offsets and validates
 single/double-far landing pads, segment IDs, object sizes, and list tags. Every
 arithmetic conversion to an address follows range checks. Frame size is capped at
@@ -107,11 +122,13 @@ storage in the runtime or generated output.
 
 ## Validation boundaries
 
-Host tests (31 tests, 98.7% `CapnpRuntime` line coverage) cover scalar decoding, framing,
+Host tests (48 tests, 97.2% `CapnpRuntime` line coverage) cover scalar decoding, framing,
+packed framing (hand-packed frames, including boundary-crossing runs and hostile tables),
 far pointers, all list encodings, nested generic lists, UTF-8/Span/Iterable blob views,
 malformed ranges, shared budgets, nesting, and single- and multi-segment deterministic
 malformed traversal. `ci/check-readers.py` uses the upstream C++ compiler for end-to-end
-fixtures, runs output-boundary hardening tests (lexical/symlink escapes, collisions, and
+fixtures, unpacks the committed `capnp encode --packed` form of each oracle message and
+requires it to equal the unpacked encoding byte for byte, runs output-boundary hardening tests (lexical/symlink escapes, collisions, and
 read-only rollback), delegates the 25-fixture `ci/check-compile-fail.py` suite, and
 compiles generated readers against a separately compiled Embedded runtime.
 `ci/check-cross.py` roots that generated path in an exported C function, `ci/check-link.sh`
