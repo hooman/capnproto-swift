@@ -84,7 +84,9 @@ func verify32BitEdges() -> Int {
     }
 
     // 4. Signed offset * 8 overflow/underflow on 32-bit Int.
-    for badOffset in [Int32(0x1000_0000), Int32(-0x1000_0001)] {
+    let badOffsets: InlineArray<2, Int32> = [0x1000_0000, -0x1000_0001]
+    for index in badOffsets.indices {
+        let badOffset = badOffsets[index]
         buf = InlineArray<64, UInt8>(repeating: 0)
         writeLE32(0, to: &buf, at: 0)
         writeLE32(1, to: &buf, at: 4)

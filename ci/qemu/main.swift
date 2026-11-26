@@ -13,7 +13,7 @@ import CapnpRuntime
 @_extern(c, "putchar") func putchar(_ c: Int32) -> Int32
 
 func put(_ text: StaticString) {
-    unsafe text.withUTF8Buffer { bytes in
+    text.withUTF8Buffer { bytes in
         for byte in bytes { _ = putchar(Int32(byte)) }
     }
 }
@@ -53,33 +53,44 @@ func put(_ value: UInt64) {
     }
 }
 
-let base = unsafe capnpInput()
-let mode = Int32(unsafe base.load(fromByteOffset: 0, as: UInt8.self))
-let shift = Int(unsafe base.load(fromByteOffset: 1, as: UInt8.self))
-let packed = unsafe base.load(fromByteOffset: 2, as: UInt8.self) != 0
-var count = 0
-for i in 0..<4 {
-    count |= Int(unsafe base.load(fromByteOffset: 4 + i, as: UInt8.self)) &<< (8 * i)
+/// Print a nonnegative `Int`. Widening to UInt64 with `UInt64(_:)` allocates on 32-bit
+/// Embedded targets; `_truncatingBits` from a `UInt` does not.
+func put(_ value: Int) {
+    put(UInt64(_truncatingBits: UInt(bitPattern: value)))
 }
-precondition(shift < 8 && count < 64 * 1024, "invalid input header")
 
-if mode == 99 {
-    put("PASS mode=99 checks=")
-    put(UInt64(verify32BitEdges()))
-} else if mode == 98 {
-    put("PASS mode=98 checks=")
-    put(UInt64(verify32BitPacked()))
-} else {
-    precondition(count > 0, "message missing")
-    let start = unsafe base + 8 + shift
-    let checksum =
-        packed
-        ? unsafe verifyPacked(start, count, mode) : unsafe verifyReaders(start, count, mode)
-    put(packed ? "PASS packed mode=" : "PASS mode=")
-    put(UInt64(mode))
-    put(" shift=")
-    put(UInt64(shift))
-    put(" checksum=")
-    put(checksum)
+/// Run the one input QEMU loaded, and print its PASS line.
+func runInput() {
+    let base = unsafe capnpInput()
+    let mode = Int32(unsafe base.load(fromByteOffset: 0, as: UInt8.self))
+    let shift = Int(unsafe base.load(fromByteOffset: 1, as: UInt8.self))
+    let packed = unsafe base.load(fromByteOffset: 2, as: UInt8.self) != 0
+    var count = 0
+    for i in 0..<4 {
+        count |= Int(unsafe base.load(fromByteOffset: 4 + i, as: UInt8.self)) &<< (8 * i)
+    }
+    precondition(shift < 8 && count < 64 * 1024, "invalid input header")
+
+    if mode == 99 {
+        put("PASS mode=99 checks=")
+        put(verify32BitEdges())
+    } else if mode == 98 {
+        put("PASS mode=98 checks=")
+        put(verify32BitPacked())
+    } else {
+        precondition(count > 0, "message missing")
+        let start = unsafe base + 8 + shift
+        let checksum =
+            packed
+            ? unsafe verifyPacked(start, count, mode) : unsafe verifyReaders(start, count, mode)
+        put(packed ? "PASS packed mode=" : "PASS mode=")
+        put(Int(mode))
+        put(" shift=")
+        put(shift)
+        put(" checksum=")
+        put(checksum)
+    }
+    put("\n")
 }
-put("\n")
+
+runInput()

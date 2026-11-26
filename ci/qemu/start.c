@@ -23,10 +23,12 @@ static int semihost(int op, const void *arg) {
     __asm__ volatile("bkpt 0xAB" : "+r"(r0) : "r"(r1) : "memory");
     return r0;
 #elif defined(__riscv)
-    /* The RISC-V semihosting trap: these three uncompressed instructions, in one page. */
+    /* The RISC-V semihosting trap: these three uncompressed instructions, in one page.
+     * Align before norvc, so the padding can use c.nop; after it, a 2-byte gap is filled
+     * with 0x0000, which is c.unimp and traps. */
     register int a0 __asm__("a0") = op;
     register const void *a1 __asm__("a1") = arg;
-    __asm__ volatile(".option push\n.option norvc\n.balign 16\n"
+    __asm__ volatile(".balign 16\n.option push\n.option norvc\n"
                      "slli zero, zero, 0x1f\nebreak\nsrai zero, zero, 7\n.option pop"
                      : "+r"(a0) : "r"(a1) : "memory");
     return a0;
@@ -94,6 +96,10 @@ static int f32_equal(float a, float b) {
 void __aeabi_memclr(void *d, size_t n) { memset(d, 0, n); }
 void __aeabi_memclr4(void *d, size_t n) { memset(d, 0, n); }
 void __aeabi_memclr8(void *d, size_t n) { memset(d, 0, n); }
+/* AEABI memset takes (dest, n, c), not memset's (dest, c, n). */
+void __aeabi_memset(void *d, size_t n, int c) { memset(d, c, n); }
+void __aeabi_memset4(void *d, size_t n, int c) { memset(d, c, n); }
+void __aeabi_memset8(void *d, size_t n, int c) { memset(d, c, n); }
 void __aeabi_memcpy(void *d, const void *s, size_t n) { memcpy(d, s, n); }
 void __aeabi_memcpy4(void *d, const void *s, size_t n) { memcpy(d, s, n); }
 void __aeabi_memcpy8(void *d, const void *s, size_t n) { memcpy(d, s, n); }
@@ -108,8 +114,15 @@ int __eqsf2(float a, float b) { return !f32_equal(a, b); }
 
 extern int main(int, char **);
 
-/* Zero .bss, paint the unused stack, run main, and report the deepest stack use. */
+/* Enable the FPU (Arm), zero .bss, paint the unused stack, run main, and report the deepest
+ * stack use. */
 __attribute__((noreturn, used)) void capnp_start(void) {
+#if defined(__arm__)
+    /* Swift's armv7em-none-none-eabi code uses the Cortex-M4F single-precision FPU (float
+     * values), which is off at reset: enable CP10 and CP11 in CPACR, as M4F firmware must. */
+    *(volatile u32 *)0xE000ED88 |= 0xFu << 20;
+    __asm__ volatile("dsb\nisb" ::: "memory");
+#endif
     for (u32 *p = &__bss_start; p < &__bss_end; ++p) *p = 0;
     u32 here;
     for (u32 *p = &__stack_bottom; p < &here - 64; ++p) *p = STACK_PAINT;

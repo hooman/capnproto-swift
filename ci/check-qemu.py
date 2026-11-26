@@ -42,8 +42,8 @@ root = Path(__file__).resolve().parent.parent
 work = Path(args.work or tempfile.mkdtemp(prefix='capnp-qemu-')).resolve()
 work.mkdir(parents=True, exist_ok=True)
 readers = Path(args.readers_work).resolve()
-swiftc = Path(shutil.which(args.swiftc) or args.swiftc).resolve()
-bin_dir = swiftc.parent
+swiftc = shutil.which(args.swiftc) or args.swiftc  # not resolved: swiftc is a symlink to swift-driver
+bin_dir = Path(swiftc).resolve().parent
 tool = {name: shutil.which(name, path=str(bin_dir)) or shutil.which(name)
         for name in ('clang', 'ld.lld', 'llvm-nm', 'llvm-objdump')}
 print(f'Artifacts: {work}', flush=True)
@@ -60,7 +60,8 @@ TARGETS = {
     'riscv32': {
         'triple': 'riscv32-none-none-eabi',
         'swift': ['-Xcc', '-march=rv32imac', '-Xcc', '-mabi=ilp32'],
-        'clang': ['-march=rv32imac', '-mabi=ilp32'],
+        # -mno-relax: the semihosting sequence's .balign must survive linker relaxation.
+        'clang': ['-march=rv32imac', '-mabi=ilp32', '-mno-relax'],
         'script': 'riscv32-virt.ld',
         'qemu': ['qemu-system-riscv32', '-M', 'virt', '-bios', 'none'],
         'input': 0x8040_0000,
@@ -70,7 +71,7 @@ TARGETS = {
 allocators = '|'.join(line.strip() for line in (root / 'ci/allocator-symbols.txt').read_text().splitlines()
                       if line.strip() and not line.startswith('#'))
 allocator = re.compile(rf'^_?({allocators})$')
-sources = sorted(p for p in (root / 'Sources/CapnpRuntime').rglob('*.swift') if '.docc' not in p.parts)
+sources = sorted((root / 'Sources/CapnpRuntime').glob('*.swift'))  # not the DocC tutorial sources
 
 
 def run(command, *, check=True):
@@ -141,7 +142,7 @@ for name in args.target or list(TARGETS):
     def passes(mode, pattern, **kwargs):
         global stack
         status, output = boot(name, target, elf, mode, **kwargs)
-        assert status == 0 and re.search(pattern, output), \
+        assert status == 0 and re.search(pattern, output, re.M), \
             f'{name}: mode={mode} {kwargs.get("shift", 0)=} {kwargs.get("packed", False)=}: ' \
             f'exit {status}: {output!r}'
         used = re.search(r'^stack=(\d+)$', output, re.M)
