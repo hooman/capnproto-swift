@@ -10,10 +10,11 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-11-25
+## [0.3.0] - 2026-11-26
 
 Packed framing: the runtime now reads packed messages, one frame at a time into storage
-the caller provides, without allocating. The generator is unchanged.
+the caller provides, without allocating. The generator is unchanged. The readers now also
+run on emulated 32-bit bare metal in CI.
 
 ### Added
 
@@ -24,12 +25,18 @@ the caller provides, without allocating. The generator is unchanged.
   Neither allocates. A frame whose segment sizes exceed `traversalLimitWords`, whose
   segment count exceeds `segmentLimit`, or that does not fit the output is rejected
   before its body is unpacked.
+- Verification: `ci/check-qemu.py` boots a `-no-allocations` image of the runtime and
+  generated readers on emulated Cortex-M4 (`mps2-an386`) and RV32 (`virt`) under QEMU, in
+  CI. It runs every oracle message (aligned, unaligned and packed) and the 32-bit edge
+  suites with host-identical results, and two negative controls must fault. Firmware on a
+  Cortex-M4F or M7 must enable the FPU before calling the runtime, because Swift's
+  `armv7em` code uses it for `Float` and `Double` fields.
 
 ### Not yet supported
 
-- Builders (writing messages), RPC and interfaces, generics, AnyPointer, text, data,
-  struct, list and AnyPointer constants, non-empty pointer defaults, and incremental
-  (streaming) packed decoding.
+- Builders (writing messages; designed for v2), RPC and interfaces, generics, AnyPointer,
+  text, data, struct, list and AnyPointer constants, non-empty pointer defaults, and
+  streaming packed decoding.
 
 ## [0.2.0] - 2026-11-23
 

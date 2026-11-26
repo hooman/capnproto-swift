@@ -57,9 +57,9 @@
                 Add the dependency, the plugin, and the `Lifetimes` experimental
                 feature every target using the readers needs — a build-tool plugin
                 can't add settings to its own host target, so this line doesn't come
-                for free. For a real project, pin `capnproto-swift` to a specific
-                commit revision (`.package(url:revision:)`) rather than a branch, so a
-                schema change upstream can't silently change your build.
+                for free. While the version is `0.x`, a minor release may break
+                source compatibility, so pin to the minor version with
+                `.upToNextMinor(from:)`.
 
                 @Code(name: "Package.swift", file: "03-Package.swift")
             }

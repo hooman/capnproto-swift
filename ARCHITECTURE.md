@@ -122,7 +122,7 @@ storage in the runtime or generated output.
 
 ## Validation boundaries
 
-Host tests (48 tests, 97.2% `CapnpRuntime` line coverage) cover scalar decoding, framing,
+Host tests (48 tests, 97.5% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
 packed framing (hand-packed frames, including boundary-crossing runs and hostile tables),
 far pointers, all list encodings, nested generic lists, UTF-8/Span/Iterable blob views,
 malformed ranges, shared budgets, nesting, and single- and multi-segment deterministic
