@@ -18,9 +18,9 @@ Reads are lazy and fail soft — a malformed field returns its schema default an
 the *first* error on the arena, rather than throwing or crashing partway through a
 message. Check ``Arena/error`` after you've read what you need.
 
-This is a **readers-only** library. There is no mutable builder yet and no RPC layer;
-see the [project roadmap](https://github.com/hooman/capnproto-swift) for what's tracked
-and what's deliberately out of scope.
+This is a **readers-only** library for now. Builders for writing messages are designed
+for v2 but not implemented, and RPC is out of scope. The
+[package README](https://github.com/hooman/capnproto-swift#readme) has the current status.
 
 ## Topics
 

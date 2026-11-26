@@ -67,7 +67,8 @@ an afterthought:
   borrows from. Swift's newest ownership features exist for exactly this shape of problem.
 
 The trade this library makes for all of that: **v1 is readers only.** There is no
-mutable-message builder yet (planned as v2) and no RPC layer (out of scope). If your
+builder for writing messages yet (designed for v2, not implemented) and no RPC layer (out
+of scope). If your
 embedded device only needs to *read* Cap'n Proto messages — telemetry frames, sensor
 config, firmware manifests, IPC payloads — that trade is likely invisible to you already.
 If you need to *construct* messages on the same constrained device, that's not this
