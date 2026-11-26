@@ -134,7 +134,9 @@ compiles generated readers against a separately compiled Embedded runtime.
 `ci/check-cross.py` roots that generated path in an exported C function, `ci/check-link.sh`
 links a bare-metal ARMv7E-M firmware image against `stubs.c` only and reports both ELF
 and loadable flash size, `ci/check-wasm.py` executes full and Embedded Wasm/WASI builds
-under WasmKit, and `ci/check-static-linux.py` verifies `aarch64`/`x86_64` musl static
+under WasmKit, `ci/check-qemu.py` boots a `-no-allocations` reader image on emulated
+Cortex-M4 and RV32 bare metal (QEMU `mps2-an386` and `virt`, semihosting for output and
+exit status) with the same inputs and the 32-bit suites in `ci/fixtures/edges32.swift`, and `ci/check-static-linux.py` verifies `aarch64`/`x86_64` musl static
 ELF binaries in `FROM scratch` Linux containers. The Embedded gate requires
 `-no-allocations` compilation, absence of allocator symbols, and rejection of an
 allocating negative control. These tests are a bounded suite, not exhaustive wire-format

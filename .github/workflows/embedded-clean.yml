@@ -131,6 +131,10 @@ jobs:
           SDK="$(dirname "$ROOT_PATH")"
           test -d "$SDK/WASI.sdk"
           python3 ci/check-wasm.py --swiftc /usr/bin/swiftc --wasm-sdk "$SDK" --readers-work /tmp/readers
+      - name: Bare-metal execution under QEMU (Cortex-M4 on mps2-an386, RV32 on virt)
+        run: |
+          apt-get install -y qemu-system-arm qemu-system-misc
+          python3 ci/check-qemu.py --swiftc /usr/bin/swiftc --readers-work /tmp/readers
 
   main-snapshot:
     name: "Linux (Swift main snapshot, informational)"
