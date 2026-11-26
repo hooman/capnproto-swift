@@ -143,7 +143,7 @@ for name in args.target or list(TARGETS):
         global stack
         status, output = boot(name, target, elf, mode, **kwargs)
         assert status == 0 and re.search(pattern, output, re.M), \
-            f'{name}: mode={mode} {kwargs.get("shift", 0)=} {kwargs.get("packed", False)=}: ' \
+            f'{name}: mode={mode} shift={kwargs.get("shift", 0)} packed={kwargs.get("packed", False)}: ' \
             f'exit {status}: {output!r}'
         used = re.search(r'^stack=(\d+)$', output, re.M)
         assert used, f'{name}: no stack report: {output!r}'

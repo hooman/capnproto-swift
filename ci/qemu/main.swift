@@ -72,11 +72,13 @@ func runInput() {
     precondition(shift < 8 && count < 64 * 1024, "invalid input header")
 
     if mode == 99 {
+        let checks = verify32BitEdges()
         put("PASS mode=99 checks=")
-        put(verify32BitEdges())
+        put(checks)
     } else if mode == 98 {
+        let checks = verify32BitPacked()
         put("PASS mode=98 checks=")
-        put(verify32BitPacked())
+        put(checks)
     } else {
         precondition(count > 0, "message missing")
         let start = unsafe base + 8 + shift
