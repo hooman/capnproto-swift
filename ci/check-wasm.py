@@ -127,7 +127,7 @@ for name, flags in variants.items():
     # Link against the SDK's clang runtime (builtins), not the host toolchain's.
     clang_resources = ['-Xclang-linker', '-resource-dir', '-Xclang-linker', str(Path(flags[1]) / 'clang')]
     run([*build, *clang_resources, '-I', out, readers / 'readers.capnp.swift', root / 'ci/fixtures/verify.swift',
-         root / 'ci/fixtures/wasi/main.swift', out / 'runtime.o', '-o', wasm])
+         root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/wasi/main.swift', out / 'runtime.o', '-o', wasm])
     for runner, command in runners:
         for message in messages:
             mode = int(message.name.split('-')[1])
