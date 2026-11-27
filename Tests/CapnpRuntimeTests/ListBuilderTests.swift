@@ -441,17 +441,20 @@ private struct NegativeBuilder: ~Copyable, ~Escapable, CapnpStructBuilder {
 extension ListBuilderTests {
     /// Answer key, written before the fix: a struct list checks its element sizes as
     /// `initStruct` does. Before, the tag word truncated a 0x1_0000-word data section to 0,
-    /// and a negative size could shrink the allocation.
+    /// and a negative size could shrink the allocation. A failed build frames nothing, so the
+    /// check is that no bytes after the root (storage 16..<24) were touched.
     @Test func structListElementSizesAreChecked() {
         let wide = build { root in
             _ = root.initList(StructListBuilder<WideBuilder>.self, at: 0, count: 1)
         }
         #expect(wide.error == .invalidLayout)
-        #expect(wide.framed == frame([rootWord(), 0]))
+        #expect(wide.framed.isEmpty)
+        #expect(wide.buffer[24..<32].allSatisfy { $0 == 0xAA })
         let negative = build { root in
             _ = root.initList(StructListBuilder<NegativeBuilder>.self, at: 0, count: 2)
         }
         #expect(negative.error == .invalidLayout)
-        #expect(negative.framed == frame([rootWord(), 0]))
+        #expect(negative.framed.isEmpty)
+        #expect(negative.buffer[24..<32].allSatisfy { $0 == 0xAA })
     }
 }
