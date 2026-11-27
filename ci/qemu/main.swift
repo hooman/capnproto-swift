@@ -1,7 +1,7 @@
 // Bare-metal driver for ci/check-qemu.py: the same inputs and output lines as the WASI driver
 // (ci/fixtures/wasi/main.swift), built Embedded and -no-allocations into one image per
 // target. QEMU's generic loader places the input at capnp_input() before boot: byte 0 is the
-// mode (0/1/2 = oracle, 98 = 32-bit packed suite, 99 = 32-bit edge suite), byte 1 a 0...7
+// mode (0/1/2 = oracle, 97 = 32-bit builder suite, 98 = 32-bit packed suite, 99 = 32-bit edge suite), byte 1 a 0...7
 // byte unalignment shift, a nonzero byte 2 marks the message as packed, bytes 4...7 hold
 // its little-endian byte count, and the message starts at offset 8 + shift. Output and exit
 // go through semihosting (ci/qemu/start.c). A failed precondition traps into the fault
@@ -78,6 +78,10 @@ func runInput() {
     } else if mode == 98 {
         let checks = verify32BitPacked()
         put("PASS mode=98 checks=")
+        put(checks)
+    } else if mode == 97 {
+        let checks = verify32BitBuilders()
+        put("PASS mode=97 checks=")
         put(checks)
     } else {
         precondition(count > 0, "message missing")

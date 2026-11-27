@@ -18,13 +18,13 @@ Product ▸ Build Documentation.
 | Reading messages — structs, lists, unions, groups, text/data, schema evolution, unpacked and packed framing | ✅ Implemented, conformance-tested against the C++ reference implementation |
 | Code generation — `capnpc-swift` plugin binary and the SwiftPM build-tool plugin | ✅ Implemented and verified from a separate consumer package |
 | Embedded Swift / allocation-free runtime | ✅ `-no-allocations` compile, allocator-symbol audit and negative control; zero `unsafe` expressions under strict memory safety |
-| macOS and Linux (glibc) hosts | ✅ In CI: 48 runtime tests (97.5% line coverage), C++ oracle conformance, 25 compile-fail fixtures, output-boundary hardening |
-| ARMv7E-M bare metal (Cortex-M4) | 🟡 Links against `ci/firmware/stubs.c` only (`7,006 B` flash on 6.4.2), and a full reader image runs under QEMU with host-identical results. Firmware on a Cortex-M4F or M7 must enable the FPU first. Not yet run on hardware |
-| RISC-V 32-bit bare metal (`rv32imac`, ESP32-C6) | 🟡 Links against `ci/firmware/stubs.c` only (`8,836 B` flash on 6.4.2), and a full reader image runs under QEMU with host-identical results. Not yet run on hardware |
+| macOS and Linux (glibc) hosts | ✅ In CI: 64 runtime tests (97.8% line coverage), C++ oracle conformance, 25 compile-fail fixtures, output-boundary hardening |
+| ARMv7E-M bare metal (Cortex-M4) | 🟡 Links against `ci/firmware/stubs.c` only (`9,922 B` flash on 6.4.2, readers and builder), and a full reader and builder image runs under QEMU with host-identical results. Firmware on a Cortex-M4F or M7 must enable the FPU first. Not yet run on hardware |
+| RISC-V 32-bit bare metal (`rv32imac`, ESP32-C6) | 🟡 Links against `ci/firmware/stubs.c` only (`12,748 B` flash on 6.4.2, readers and builder), and a full reader and builder image runs under QEMU with host-identical results. Not yet run on hardware |
 | WebAssembly / WASI | ✅ Full and Embedded Swift run every oracle message (aligned, unaligned and packed) and the 32-bit edge checks under WasmKit |
 | Static Linux (musl) | 🟡 Verified locally on 6.4.2 (`aarch64` native, `x86_64` under Rosetta); not yet on native `x86_64` hardware |
 | Embedded builds with full debug info (`-g`) | 🟡 Swift 6.4.0–6.4.2 need `-gline-tables-only`; fixed on `main` (see *Embedded debug info*) |
-| Writing messages (builders) | ⬜ Designed for v2 (one caller buffer, exclusive builder views); not implemented |
+| Writing messages (builders) | 🟡 Runtime core on `main`, unreleased: structs and scalars into caller storage (see *Build a message*). Generated builders, text, data and lists are next (D-18) |
 | RPC / capabilities | ⬜ Out of scope |
 | Tagged release | ✅ `0.3.0`, see [CHANGELOG.md](CHANGELOG.md) |
 
@@ -179,6 +179,46 @@ enclosing struct's reader: `const answer :Int32 = 42;` is
 `public static var answer: Int32 { Int32(42) }`, and an enum constant returns its case.
 Float constants are written by bit pattern, so NaN, infinities and `-0.0` are exact.
 
+## Build a message
+
+*Unreleased, on `main`: the runtime core of v2 builders (D-18). Generated builders, text,
+data and lists come next; until then you pass struct sizes and field offsets yourself.*
+
+A `MessageBuilder` writes one single-segment framed message into storage you provide. It
+never allocates, and it writes nothing outside that storage.
+
+```swift
+func buildExample() -> UInt32? {
+    var storage = InlineArray<16, UInt64>(repeating: 0)  // or any MutableRawSpan
+    var span = storage.mutableSpan
+    var message = MessageBuilder(storage: span.mutableBytes)
+    do {
+        var root = message.initRoot(dataWords: 1, pointerCount: 1)
+        root.setData(UInt32(42), at: 0, default: 0)
+        var child = root.initStruct(at: 0, dataWords: 1, pointerCount: 0)  // borrows root
+        child.setData(UInt64(7), at: 0, default: 0)
+    }
+    guard message.error == .none else {
+        return nil  // .outOfSpace: retry with message.requiredByteCount bytes
+    }
+    let arena = Arena(framedBytes: message.framedBytes)  // read it back without copying
+    return arena.withRoot { $0.data(at: 0, default: UInt32(0)) }
+}
+```
+
+- **Exclusive views.** `MessageBuilder` and `StructBuilder` are `~Copyable, ~Escapable` and
+  `~Sendable`. A child view borrows its parent, so the compiler rejects writing the parent
+  while the child is alive. Build children one after another.
+- **Sticky errors that never trap.** The first failure is kept in `message.error`, and later
+  writes are no-ops. `.outOfSpace` comes with `requiredByteCount`, the exact size to retry
+  with when the same build steps run again. `.nestingLimit` refuses a struct more than 64
+  levels deep, the default reader's limit. `.invalidLayout` reports an out-of-range field or
+  size.
+- **Wire rules.** Scalars are stored XOR their schema default. Allocated space is zeroed,
+  and storage needn't be aligned or zeroed. Re-initializing a pointer, or `clearPointer`,
+  zeroes the old object and everything below it; the space isn't reclaimed. A zero-sized
+  struct gets offset −1, so it doesn't read as null.
+
 ## Supported scope
 
 - Standard framing, unpacked or packed (`Packed.unpackFrame` into caller storage),
@@ -207,7 +247,8 @@ The generator diagnoses, in the files it generates:
 
 An unused interface in an imported file doesn't block generation.
 
-Not provided: builders, RPC, a streaming packed decoder, a public async API, or a
+Not provided yet: generated builders (the runtime core is in; see *Build a message*), RPC, a
+streaming packed decoder, a public async API, or a
 `Sendable` arena. Apple targets require OS 27 (macOS, iOS, watchOS, tvOS, visionOS), where
 SE-0525's safe `RawSpan` loads are available; non-Apple targets have no OS gate.
 
@@ -265,12 +306,12 @@ reference generated from doc comments.
 
 | Target | Verified with Swift 6.4.0 / 6.4.2 (and `main-2026-11-01` locally) | Remaining validation |
 |---|---|---|
-| macOS host | 48 runtime tests (97.5% line coverage on 6.4.2), generator + output-boundary hardening, C++ fixtures, 25 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
+| macOS host | 64 runtime tests (97.8% line coverage on 6.4.2), generator + output-boundary hardening, C++ fixtures, 25 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
 | Linux x86-64 (glibc) | Host execution, strict `swift format` lint, and Embedded object checks in CI | Additional architectures and distributions |
-| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`7,006 B` flash / `13,244 B` ELF on 6.4.2; `6,451 B` flash / `11,816 B` ELF on `main-2026-11-01`, including the packed unpacker; `5,358 B` / `4,955 B` flash without it, with PAL `_swift_deallocate` negative-control rejection, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, Cortex-M4 on `mps2-an386`, in CI): a `-no-allocations` image of the runtime, generated readers and shared assertions (`16,032 B` flash on 6.4.2, `15,649 B` on `main-2026-11-01`; peak stack `3,780 B` reading unpacked messages, `12,072 B` with the driver's 8 KiB packed-output buffer on the stack) runs the same inputs as Wasm with host-identical checksums, and two negative controls trap to the fault handler. The runtime and generated readers use VFP registers, so the startup enables the Cortex-M4F FPU; without it the first `Float` read faults (NOCP) | Physical hardware execution; cores without an FPU (Cortex-M3, M4 without F) |
-| RISC-V 32-bit bare metal (`rv32imac`) | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`8,836 B` flash / `17,864 B` ELF on 6.4.2; `8,239 B` flash / `23,492 B` ELF on `main-2026-11-01`, including the packed unpacker; `6,798 B` / `6,395 B` flash without it, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, `rv32imac` on `virt`, in CI): the same image and inputs as ARMv7E-M (`18,998 B` flash on 6.4.2, `18,855 B` on `main-2026-11-01`; peak stack `3,908 B` unpacked, `12,164 B` packed) | Real hardware (e.g. ESP32-C6) execution |
+| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`9,922 B` flash / `19,388 B` ELF on 6.4.2; `9,415 B` flash / `16,996 B` ELF on `main-2026-11-01`, including the packed unpacker and the builder; without the builder `7,006 B` / `6,451 B`, and without either `5,358 B` / `4,955 B`; with PAL `_swift_deallocate` negative-control rejection, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, Cortex-M4 on `mps2-an386`, in CI): a `-no-allocations` image of the runtime, generated readers, the builder and shared assertions (`21,380 B` flash on 6.4.2, `22,053 B` on `main-2026-11-01`; peak stack `3,780 B` reading unpacked messages, `12,072 B` with the driver's 8 KiB packed-output buffer on the stack) runs the same inputs and 32-bit suites (edge, packed, builder) as Wasm with host-identical checksums, and two negative controls trap to the fault handler. The runtime and generated readers use VFP registers, so the startup enables the Cortex-M4F FPU; without it the first `Float` read faults (NOCP) | Physical hardware execution; cores without an FPU (Cortex-M3, M4 without F) |
+| RISC-V 32-bit bare metal (`rv32imac`) | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`12,748 B` flash / `26,656 B` ELF on 6.4.2; `12,101 B` flash / `34,392 B` ELF on `main-2026-11-01`, including the packed unpacker and the builder; `8,836 B` / `8,239 B` flash without the builder, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, `rv32imac` on `virt`, in CI): the same image and inputs as ARMv7E-M (`26,282 B` flash on 6.4.2, `27,227 B` on `main-2026-11-01`; peak stack `3,908 B` unpacked, `12,164 B` packed) | Real hardware (e.g. ESP32-C6) execution |
 | Static Linux SDK (musl) | Verified locally with Swift 6.4.2 (`swift-6.4.2-RELEASE_static-linux-0.1.0`, musl 1.2.5): `aarch64` and `x86_64` statically linked ELF executables (`INTERP`/`DYNAMIC`/`NEEDED` absent) run all 9 C++ oracle messages + wrong-mode negative control in `FROM scratch` Linux containers (`aarch64` native arm64 Linux, `x86_64` Rosetta-emulated on Apple Silicon); SwiftPM `--swift-sdk` builds `CapnpRuntime` cleanly (SDK ships no `Testing` module). Full-Swift static binaries allocate; this is separate from `-no-allocations` | Native `x86_64` Linux hardware execution |
-| WebAssembly / WASI | Full and Embedded builds run all 9 aligned + 2 unaligned (`+1`/`+3` byte shifted) C++ oracle messages and the same 9 packed, plus 8 32-bit edge checks (single/double-far `Int32.max` overflow guards, `signedOffsetWords` overflow, `Atomic<UInt>` budget clamping, amplification, unaligned `UTF8Span`, malformed frame/UTF-8) and 5 packed ones (hostile segment tables past a 32-bit `Int`, amplification bounded by the output, a segment-crossing run) under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
+| WebAssembly / WASI | Full and Embedded builds run all 9 aligned + 2 unaligned (`+1`/`+3` byte shifted) C++ oracle messages and the same 9 packed, plus 8 32-bit edge checks (single/double-far `Int32.max` overflow guards, `signedOffsetWords` overflow, `Atomic<UInt>` budget clamping, amplification, unaligned `UTF8Span`, malformed frame/UTF-8) and 5 packed ones (hostile segment tables past a 32-bit `Int`, amplification bounded by the output, a segment-crossing run), plus 7 builder checks (layouts, the out-of-space sweep with guard bytes, limits) under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
 
 Snapshot or vendor compilers reporting a newer Swift version are not automatically
 qualified by these results. Static linking, Embedded mode and allocation freedom are

@@ -93,12 +93,12 @@ runtime_obj, negative_obj = work / 'gate-runtime.o', work / 'gate-negative.o'
 run([*embedded, '-strict-memory-safety', '-module-name', 'CapnpRuntime', '-c', *sources,
      root / 'ci/runtime-entry.swift', '-o', runtime_obj])
 run([*embedded, '-module-name', 'negative', '-c', root / 'ci/negative-control.swift', '-o', negative_obj])
-for entry in ['capnp_embedded_probe', 'capnp_embedded_packed_probe']:
+for entry in ['capnp_embedded_probe', 'capnp_embedded_packed_probe', 'capnp_embedded_builder_probe']:
     found = reachable_allocators(runtime_obj, entry)
     assert not found, f'allocators reachable from {entry}: {found}'
 caught = reachable_allocators(negative_obj, '_negative_control')
 assert caught, 'negative control reaches no allocator: the call-graph gate is vacuous'
-print(f'PASS wasm-embedded allocation gate: runtime and packed probes reach none; negative control reaches {caught}', flush=True)
+print(f'PASS wasm-embedded allocation gate: runtime, packed and builder probes reach none; negative control reaches {caught}', flush=True)
 
 # 2. Execution under every available runner.
 runners = []
@@ -127,7 +127,7 @@ for name, flags in variants.items():
     # Link against the SDK's clang runtime (builtins), not the host toolchain's.
     clang_resources = ['-Xclang-linker', '-resource-dir', '-Xclang-linker', str(Path(flags[1]) / 'clang')]
     run([*build, *clang_resources, '-I', out, readers / 'readers.capnp.swift', root / 'ci/fixtures/verify.swift',
-         root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/wasi/main.swift', out / 'runtime.o', '-o', wasm])
+         root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/build32.swift', root / 'ci/fixtures/wasi/main.swift', out / 'runtime.o', '-o', wasm])
     for runner, command in runners:
         for message in messages:
             mode = int(message.name.split('-')[1])
@@ -153,7 +153,10 @@ for name, flags in variants.items():
         # 32-bit packed suite: hostile segment tables, amplification, a segment-crossing run.
         packed_out = run([*command, wasm], data=bytes([98, 0]) + bytes(6))
         assert re.search(r'PASS mode=98 checks=5\b', packed_out), f'{name}/{runner}/mode=98: {packed_out!r}'
+        # 32-bit builder suite (D-18): layouts, out-of-space sweep with guard bytes, limits.
+        build_out = run([*command, wasm], data=bytes([97, 0]) + bytes(6))
+        assert re.search(r'PASS mode=97 checks=7\b', build_out), f'{name}/{runner}/mode=97: {build_out!r}'
         print(f'PASS wasm {name} under {runner}: {len(messages)} aligned + 2 unaligned oracle messages, '
-              f'{len(messages)} packed, 8 32-bit edge checks and 5 packed ({wasm.stat().st_size} bytes)',
+              f'{len(messages)} packed, 8 32-bit edge checks, 5 packed and 7 builder ({wasm.stat().st_size} bytes)',
               flush=True)
 print('WASM CHECK: PASS', flush=True)

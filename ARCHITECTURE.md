@@ -77,6 +77,31 @@ error. Non-empty pointer defaults are explicitly unsupported. Custom conformance
 to `CapnpPrimitive` are trusted code: their size and load implementation must obey
 the protocol’s documented load contract.
 
+## Builders
+
+`MessageBuilder: ~Copyable, ~Escapable, ~Sendable` (D-18) borrows a caller `MutableRawSpan` and
+owns the allocation state: bytes used, bytes required, and a sticky `BuildError`. Storage bytes
+0..<8 hold the frame header and 8..<16 the root pointer; the single segment grows from byte 8
+by bump allocation, so every pointer written points forward. The usable size is rounded down
+to whole words and capped at `Int.max / 8` bytes and 2^32 − 1 segment words, so no offset or
+header field overflows on 32-bit targets.
+
+`StructBuilder` views are exclusive. Each holds a reborrowed `MutableRawSpan` of the whole
+storage (`_mutatingExtracting`) and a SE-0519 `MutableRef<BuildState>`. `initRoot` and
+`initStruct` are `mutating` and `@_lifetime(&self)`, so a child borrows its parent and the
+compiler rejects aliased writes, copies and escapes; no `unsafe` is involved. A copyable
+view would need raw pointers. Accessors are methods: on 6.4.2 a public get/set property on
+these views emits an allocating `modify` coroutine that `-no-allocations` does not reject.
+
+Allocation zeroes what it hands out and updates the header's segment size. A zero-sized
+struct is encoded with offset −1. Re-initializing a pointer, or `clearPointer`, first zeroes
+the old object and its subtree recursively; recursion is bounded because no struct deeper
+than 64 levels (`.nestingLimit`, the default reader limit) is ever built. After a failure,
+views carry their sizes but no storage: writes are no-ops, and allocation keeps counting, so
+`requiredByteCount` is exact for a retry. Scalars are stored by `CapnpPrimitive.storeMasked`,
+XOR the default; integer and float stores use the SE-0525 byte-order `storeBytes`, and words
+are written as two `UInt32` halves to avoid 64-bit shifts on 32-bit targets.
+
 ## Generator
 
 The host executable buffers at most 64 MiB from stdin and decodes exactly one
@@ -122,11 +147,12 @@ storage in the runtime or generated output.
 
 ## Validation boundaries
 
-Host tests (48 tests, 97.5% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
+Host tests (64 tests, 97.8% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
 packed framing (hand-packed frames, including boundary-crossing runs and hostile tables),
 far pointers, all list encodings, nested generic lists, UTF-8/Span/Iterable blob views,
 malformed ranges, shared budgets, nesting, and single- and multi-segment deterministic
-malformed traversal. `ci/check-readers.py` uses the upstream C++ compiler for end-to-end
+malformed traversal, and the builder answer key (hand-computed frames, re-initialization, the
+out-of-space sweep with guard bytes at aligned and unaligned offsets, limits). `ci/check-readers.py` uses the upstream C++ compiler for end-to-end
 fixtures, unpacks the committed `capnp encode --packed` form of each oracle message and
 requires it to equal the unpacked encoding byte for byte, runs output-boundary hardening tests (lexical/symlink escapes, collisions, and
 read-only rollback), delegates the 25-fixture `ci/check-compile-fail.py` suite, and

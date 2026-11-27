@@ -3,7 +3,7 @@
 
 Builds one Embedded, -no-allocations image per target: the runtime, the generated fixture
 readers, the shared assertions (ci/fixtures/verify.swift) and 32-bit suites
-(ci/fixtures/edges32.swift), and the bare-metal driver and startup in ci/qemu. Each image
+(ci/fixtures/edges32.swift) and builder suite (ci/fixtures/build32.swift), and the bare-metal driver and startup in ci/qemu. Each image
 links against ci/qemu/start.c only (no libc, no compiler-rt, no allocator) and is audited
 for allocator symbols. Then it is booted once per input, with the same inputs and expected
 results as ci/check-wasm.py:
@@ -11,7 +11,8 @@ results as ci/check-wasm.py:
 - the 9 C++ oracle messages, with the host driver's checksum
 - the populated multi-segment message again at +1 and +3 byte offsets
 - the same 9 messages packed by capnp (ci/fixtures/packed)
-- the 32-bit edge suite (8 checks) and the 32-bit packed suite (5 checks)
+- the 32-bit edge suite (8 checks), the 32-bit packed suite (5 checks) and the 32-bit
+  builder suite (7 checks: layouts, the out-of-space sweep with guard bytes, limits)
 
 Each boot must exit 0 and print its PASS line. Two negative controls must fail through the
 fault handler (FAULT, non-zero exit): a message with a corrupted segment table, and a
@@ -91,7 +92,8 @@ def build(name, target):
     run([*swift, '-strict-memory-safety', '-parse-as-library', '-emit-module', '-module-name', 'CapnpRuntime',
          '-emit-module-path', out / 'CapnpRuntime.swiftmodule', *sources, '-c', '-o', out / 'runtime.o'])
     run([*swift, '-I', out, '-module-name', 'image', '-c', readers / 'readers.capnp.swift',
-         root / 'ci/fixtures/verify.swift', root / 'ci/fixtures/edges32.swift', root / 'ci/qemu/main.swift',
+         root / 'ci/fixtures/verify.swift', root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/build32.swift',
+         root / 'ci/qemu/main.swift',
          '-o', out / 'image.o'])
     run([tool['clang'], '-target', target['triple'], *target['clang'], '-ffreestanding', '-fno-builtin', '-Os',
          '-c', root / 'ci/qemu/start.c', '-o', out / 'start.o'])
@@ -160,6 +162,7 @@ for name in args.target or list(TARGETS):
                shift=shift, message=populated.read_bytes())
     passes(99, r'^PASS mode=99 checks=8$')
     passes(98, r'^PASS mode=98 checks=5$')
+    passes(97, r'^PASS mode=97 checks=7$')
 
     # Negative controls: each must trap into the fault handler and exit non-zero.
     corrupted = bytearray(populated.read_bytes())
@@ -171,6 +174,6 @@ for name in args.target or list(TARGETS):
         assert status != 0 and 'FAULT' in output and 'PASS' not in output, \
             f'{name}: negative control "{label}" did not fail: exit {status}: {output!r}'
     print(f'PASS qemu {name} ({" ".join(target["qemu"][:3])}): {len(messages)} aligned + 2 unaligned '
-          f'oracle messages, {len(messages)} packed, 8 32-bit edge checks and 5 packed; '
+          f'oracle messages, {len(messages)} packed, 8 32-bit edge checks, 5 packed and 7 builder; '
           f'2 negative controls fault; flash={flash} B, max stack={stack} B', flush=True)
 print('QEMU CHECK: PASS', flush=True)

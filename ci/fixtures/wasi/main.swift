@@ -1,7 +1,8 @@
 // WASI driver for the shared fixture assertions and 32-bit runtime edge tests; builds as
 // full Swift and as Embedded Swift. stdin carries an 8-byte prefix: byte 0 is the mode
-// (0/1/2 = oracle verifyReaders, 98 = 32-bit packed suite, 99 = 32-bit overflow/clamping/
-// malformed/unaligned suite; both suites are in ci/fixtures/edges32.swift), byte 1 is an
+// (0/1/2 = oracle verifyReaders, 97 = 32-bit builder suite in ci/fixtures/build32.swift,
+// 98 = 32-bit packed suite, 99 = 32-bit overflow/clamping/malformed/unaligned suite; both in
+// ci/fixtures/edges32.swift), byte 1 is an
 // optional 0...7 byte unalignment shift for the message buffer, and a nonzero byte 2 marks
 // the message as packed. A failed precondition traps, so the runner's exit status reports
 // assertion failures.
@@ -35,6 +36,9 @@ if input.mode == 99 {
 } else if input.mode == 98 {
     let checks = verify32BitPacked()
     print("PASS mode=98 checks=\(checks)")
+} else if input.mode == 97 {
+    let checks = verify32BitBuilders()
+    print("PASS mode=97 checks=\(checks)")
 } else {
     precondition(input.count > 0, "message missing")
     let checksum = unsafe withUnsafeBytes(of: &buffer) { raw in
