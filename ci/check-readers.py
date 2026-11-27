@@ -643,6 +643,96 @@ edited_constants('name-collision', rename_answer, reject=r'capnpc-swift:.*duplic
 print(f'PASS: constants (golden, C++ oracle bit-exact, {len(const_rejects)} diagnosed, 4 edited requests)',
       flush=True)
 
+
+# Generated builders (D-18 item 2): the reverse oracle. The answer key was committed before
+# the generator change: builders-main.swift is written against the intended API, and the
+# expected content is the capnp text below. Each Swift-built message must equal `capnp encode`
+# of that text in canonical form (canonicalization ignores allocation order), decode to the
+# same text, and keep every word that no pointer reaches zero: canonical form drops those
+# words, so stale data left by re-initialization or a union switch would be invisible to it.
+builders = work / 'builders'
+builders.mkdir()
+run([capnp, 'compile', '-o', f'{plugin}:{builders}', f'--src-prefix={fixture}', fixture / 'builders.capnp'])
+builder_messages = {
+    0: b'()',
+    1: b'(flag = false, i8 = 100, i16 = -2, i32 = 0, i64 = -9000000000, u8 = 255, u16 = 0, '
+       b'u32 = 4000000000, u64 = 1, f32 = 2.5, f64 = -0.0, level = high, '
+       b'child = (id = 3, level = low, inner = (id = 4)), info = (age = 40, known = true), '
+       b'count = 0, extra = (b = 77))',
+    2: b'(pick = (id = 11, inner = ()), extra = (a = 5))',
+    3: b'(pair = (left = 7), info = (known = false))',
+    4: b'(none = void)',
+    10: b'(pair = (left = 7))',
+    11: b'(count = 9)',
+    12: b'(pair = (left = 3))',
+    13: b'(child = (id = 7))',
+    14: b'()',
+    15: b'(extra = (a = 2))',
+}
+run([swiftc, *flags, *link_flags, '-O', '-parse-as-library', '-I', host,
+     builders / 'builders.capnp.swift', fixture / 'builders-main.swift', host / 'runtime.o',
+     '-o', builders / 'build'])
+print(run([builders / 'build', *(f'{mode}:{builders / f"swift-{mode}.bin"}' for mode in builder_messages)])
+      .decode().strip(), flush=True)
+
+
+def unreachable_words_are_zero(frame: bytes) -> bool:
+    """Walk struct pointers from the root of a one-segment frame; every other word must be 0."""
+    count, size = struct.unpack_from('<II', frame, 0)
+    assert count == 0 and len(frame) == 8 + size * 8, 'expected one segment'
+    words = struct.unpack_from(f'<{size}Q', frame, 8)
+    reached = [False] * size
+
+    def follow(at: int, depth: int) -> None:
+        reached[at] = True
+        word = words[at]
+        if word == 0 or depth > 64:
+            return
+        assert word & 3 == 0, f'only struct pointers expected, word {at}: {word:#x}'
+        offset = ((word & 0xFFFF_FFFF) >> 2) - (1 << 30 if word & 0x8000_0000 else 0)
+        data, pointers = (word >> 32) & 0xFFFF, word >> 48
+        start = at + 1 + offset
+        for i in range(start, start + data + pointers):
+            reached[i] = True
+        for i in range(pointers):
+            follow(start + data + i, depth + 1)
+
+    follow(0, 0)
+    return all(reached[i] or words[i] == 0 for i in range(size))
+
+
+def canonical(message: bytes) -> bytes:
+    return run([capnp, 'convert', 'binary:canonical', fixture / 'builders.capnp', 'Root'], data=message)
+
+
+for mode, text in builder_messages.items():
+    swift_bytes = (builders / f'swift-{mode}.bin').read_bytes()
+    oracle = run([capnp, 'encode', fixture / 'builders.capnp', 'Root'], data=text)
+    assert canonical(swift_bytes) == canonical(oracle), f'builder mode {mode}: canonical form differs'
+    assert unreachable_words_are_zero(swift_bytes), f'builder mode {mode}: stale unreachable words'
+    decoded = run([capnp, 'decode', fixture / 'builders.capnp', 'Root'], data=swift_bytes)
+    assert decoded == run([capnp, 'decode', fixture / 'builders.capnp', 'Root'], data=oracle), \
+        f'builder mode {mode}: capnp decode differs'
+# Generated builder names must not collide with each other or with sibling types.
+builder_rejects = {
+    'collide-builder-top': ('struct E { x @0 :UInt8; } enum EBuilder { a @0; }', r'duplicate generated type name'),
+    'collide-builder-nested': ('struct S { struct E { x @0 :UInt8; } enum EBuilder { a @0; } }',
+                               r'duplicate generated type name'),
+    'collide-init-member': ('struct S { child @0 :C; initChild @1 :UInt8; struct C { x @0 :UInt8; } }',
+                            r'duplicate generated builder member'),
+    'collide-clear-member': ('struct S { child @0 :C; clearChild @1 :UInt8; struct C { x @0 :UInt8; } }',
+                             r'duplicate generated builder member'),
+    'collide-set-member': ('struct S { foo @0 :UInt8; setFoo @1 :UInt8; }', r'duplicate generated builder member'),
+}
+for name, (schema, reject) in builder_rejects.items():
+    path = work / f'{name}.capnp'
+    path.write_text('@0xbedead1234567892;\n' + schema + '\n')
+    run([capnp, 'compile', '-o', plugin, path.name], reject=rf'capnpc-swift:.*{reject}')
+    assert not Path(str(path) + '.swift').exists()
+print(f'PASS: generated builders (reverse oracle: {len(builder_messages)} messages canonical-equal to '
+      f'capnp encode, unreachable words zero, capnp decode equal; {len(builder_rejects)} diagnosed)',
+      flush=True)
+
 if not args.host_only:
     embedded = work / 'embedded'
     embedded.mkdir(exist_ok=True)
@@ -658,7 +748,10 @@ if not args.host_only:
          enums / 'enums.capnp.swift', fixture / 'enums-verify.swift', '-o', embedded / 'enums.o'])
     run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', constants / 'enums-import.capnp.swift',
          constants / 'constants.capnp.swift', fixture / 'constants-verify.swift', '-o', embedded / 'constants.o'])
-    for obj in [embedded / 'runtime.o', embedded / 'readers.o', embedded / 'enums.o', embedded / 'constants.o']:
+    run([swiftc, *ef, '-I', embedded, '-parse-as-library', '-c', builders / 'builders.capnp.swift',
+         '-o', embedded / 'builders.o'])
+    for obj in [embedded / 'runtime.o', embedded / 'readers.o', embedded / 'enums.o', embedded / 'constants.o',
+                embedded / 'builders.o']:
         symbols = run(['nm', obj]).decode()
         assert not re.search(rf'\b_?({allocators})$', symbols, re.M), symbols
         print(f'PASS Embedded: {obj.name}, object bytes={obj.stat().st_size}', flush=True)

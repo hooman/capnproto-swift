@@ -127,7 +127,8 @@ for name, flags in variants.items():
     # Link against the SDK's clang runtime (builtins), not the host toolchain's.
     clang_resources = ['-Xclang-linker', '-resource-dir', '-Xclang-linker', str(Path(flags[1]) / 'clang')]
     run([*build, *clang_resources, '-I', out, readers / 'readers.capnp.swift', root / 'ci/fixtures/verify.swift',
-         root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/build32.swift', root / 'ci/fixtures/wasi/main.swift', out / 'runtime.o', '-o', wasm])
+         root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/build32.swift', root / 'ci/fixtures/genbuild32.swift',
+         root / 'ci/fixtures/wasi/main.swift', out / 'runtime.o', '-o', wasm])
     for runner, command in runners:
         for message in messages:
             mode = int(message.name.split('-')[1])
@@ -156,7 +157,9 @@ for name, flags in variants.items():
         # 32-bit builder suite (D-18): layouts, out-of-space sweep with guard bytes, limits.
         build_out = run([*command, wasm], data=bytes([97, 0]) + bytes(6))
         assert re.search(r'PASS mode=97 checks=7\b', build_out), f'{name}/{runner}/mode=97: {build_out!r}'
+        gen_out = run([*command, wasm], data=bytes([96, 0]) + bytes(6))
+        assert re.search(r'PASS mode=96 checks=2\b', gen_out), f'{name}/{runner}/mode=96: {gen_out!r}'
         print(f'PASS wasm {name} under {runner}: {len(messages)} aligned + 2 unaligned oracle messages, '
-              f'{len(messages)} packed, 8 32-bit edge checks, 5 packed and 7 builder ({wasm.stat().st_size} bytes)',
+              f'{len(messages)} packed, 8 32-bit edge checks, 5 packed, 7 builder and 2 generated-builder ({wasm.stat().st_size} bytes)',
               flush=True)
 print('WASM CHECK: PASS', flush=True)
