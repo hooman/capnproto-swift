@@ -45,6 +45,23 @@ func verify32BitGeneratedBuilders() -> Int {
             detail.setAmount(10)
         }
         precondition(example._capnpWhich() == .detail)
+        // Item 3: text, data and lists.
+        example.setText("hi".utf8Span)
+        do {
+            var numbers = example.initNumbers(count: 2)
+            numbers.setElement(4_000_000_000, at: 1)
+        }
+        do {
+            var children = example.initChildren(count: 2)
+            var second = children.element(at: 1)
+            second.setId(77)
+            second.setName("n".utf8Span)
+        }
+        do {
+            var matrix = example.initMatrix(count: 1)
+            var row = matrix.initElement(at: 0, count: 1)
+            row.setElement(5, at: 0)
+        }
         checks += 1
     }
     let buildError = message.error
@@ -58,8 +75,15 @@ func verify32BitGeneratedBuilders() -> Int {
             && example.child.id == 43 && example._capnpWhich == .detail
             && example.detail.amount == 10
     }
+    let lists = arena.withRoot { root in
+        let example = GenExample.ExampleReader(root)
+        return example.text.utf8.count == 2 && example.numbers.count == 2
+            && example.numbers[1] == 4_000_000_000 && example.children.count == 2
+            && example.children[1].id == 77 && example.children[1].name.utf8.count == 1
+            && example.matrix[0][0] == 5
+    }
     let readError = arena.error
-    precondition(ok && readError == .none)
-    checks += 1
+    precondition(ok && lists && readError == .none)
+    checks += 2
     return checks
 }

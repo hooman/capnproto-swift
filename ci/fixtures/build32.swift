@@ -244,5 +244,44 @@ func verify32BitBuilders() -> Int {
         precondition(ok && readError == .none)
         checks += 1
     }
+    // 8. Lists, text and data (item 3): an exact frame, and over-limit sizes that would
+    // overflow a 32-bit Int record an error instead of trapping.
+    do {
+        var storage = InlineArray<8, UInt64>(repeating: 0)
+        var span = storage.mutableSpan
+        var message = MessageBuilder(storage: span.mutableBytes)
+        do {
+            var root = message.initRoot(dataWords: 0, pointerCount: 2)
+            root.setText("hi".utf8Span, at: 0)
+            var numbers = root.initList(PrimitiveListBuilder<UInt16>.self, at: 1, count: 3)
+            numbers.setElement(0xBEEF, at: 2)
+        }
+        let framed = message.framedBytes
+        precondition(message.error == .none && framed.byteCount == 48)
+        precondition(frameWord(framed, 2) == 0x0000_001A_0000_0005)  // text: 3 bytes, +1 word
+        precondition(frameWord(framed, 3) == 0x0000_001B_0000_0005)  // 3 two-byte elements
+        precondition(frameWord(framed, 4) == 0x6968 && frameWord(framed, 5) == 0xBEEF_0000_0000)
+    }
+    do {
+        var storage = InlineArray<4, UInt64>(repeating: 0)
+        var span = storage.mutableSpan
+        var message = MessageBuilder(storage: span.mutableBytes)
+        do {
+            var root = message.initRoot(dataWords: 0, pointerCount: 1)
+            _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 0, count: (1 << 29) - 1)
+        }
+        precondition(message.error == .outOfSpace)
+    }
+    do {
+        var storage = InlineArray<4, UInt64>(repeating: 0)
+        var span = storage.mutableSpan
+        var message = MessageBuilder(storage: span.mutableBytes)
+        do {
+            var root = message.initRoot(dataWords: 0, pointerCount: 1)
+            _ = root.initList(PrimitiveListBuilder<UInt8>.self, at: 0, count: 1 << 29)
+        }
+        precondition(message.error == .listTooLong)
+        checks += 1
+    }
     return checks
 }

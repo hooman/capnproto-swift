@@ -162,8 +162,8 @@ for name in args.target or list(TARGETS):
                shift=shift, message=populated.read_bytes())
     passes(99, r'^PASS mode=99 checks=8$')
     passes(98, r'^PASS mode=98 checks=5$')
-    passes(97, r'^PASS mode=97 checks=7$')
-    passes(96, r'^PASS mode=96 checks=2$')
+    passes(97, r'^PASS mode=97 checks=8$')
+    passes(96, r'^PASS mode=96 checks=3$')
 
     # Negative controls: each must trap into the fault handler and exit non-zero.
     corrupted = bytearray(populated.read_bytes())
