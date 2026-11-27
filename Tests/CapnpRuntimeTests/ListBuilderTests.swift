@@ -458,3 +458,47 @@ extension ListBuilderTests {
         #expect(negative.buffer[24..<32].allSatisfy { $0 == 0xAA })
     }
 }
+
+extension ListBuilderTests {
+    /// Answer key, written before the fix (comment-review eval 1, finding F3). A list that
+    /// fails for lack of space keeps its count, so a caller that loops over `count` still has
+    /// every element's subtree counted, and `requiredByteCount` stays the exact size to retry
+    /// with. Before, such a list reported `count == 0`, the loop did nothing, and the retry
+    /// failed again.
+    ///
+    /// Sizes: header 8 + root pointer 8 + root struct (1 pointer) 8 = 24. Three texts: list
+    /// body 3 words (24), and each "ab" + NUL is one word (24), so 72 in all. Two `NodeBuilder`
+    /// elements: tag 8 + 2 words (16), and each "x" + NUL is one word (16), so 64 in all.
+    @Test func failedListKeepsItsCountForTheRetry() {
+        func texts(_ root: inout StructBuilder) {
+            var list = root.initList(TextListBuilder.self, at: 0, count: 3)
+            #expect(list.count == 3)
+            for i in 0..<list.count { list.setElement("ab".utf8Span, at: i) }
+        }
+        for capacity in stride(from: 16, through: 80, by: 8) {
+            let built = build(capacity: capacity, texts)
+            if capacity < 72 {
+                #expect(built.error == .outOfSpace, "capacity \(capacity)")
+                #expect(built.required == 72, "capacity \(capacity)")
+            } else {
+                #expect(built.error == .none, "capacity \(capacity)")
+                #expect(built.framed.count == 72, "capacity \(capacity)")
+            }
+        }
+
+        func nodes(_ root: inout StructBuilder) {
+            var list = root.initList(StructListBuilder<NodeBuilder>.self, at: 0, count: 2)
+            #expect(list.count == 2)
+            for i in 0..<list.count {
+                var node = list.element(at: i)
+                node.builder.setText("x".utf8Span, at: 0)
+            }
+        }
+        let short = build(capacity: 24, nodes)
+        #expect(short.error == .outOfSpace)
+        #expect(short.required == 64)
+        let retry = build(capacity: short.required, nodes)
+        #expect(retry.error == .none)
+        #expect(retry.framed.count == 64)
+    }
+}
