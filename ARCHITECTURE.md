@@ -15,7 +15,7 @@ Copying a view copies positions and lifetime dependencies, not the message or li
 This is deliberate: computed properties and borrow accessors on noncopyable views still
 synthesize coroutine allocator calls on verified Swift 6.4.x and `main` toolchains.
 Copyable views compile without those allocator references and keep the compiler-enforced
-lifetime proof. Arena ownership remains unique. The 25-fixture `ci/check-compile-fail.py`
+lifetime proof. Arena ownership remains unique. The 35-fixture `ci/check-compile-fail.py`
 suite guards lifetime, noncopyability, non-`Sendable`, and strict memory safety contracts.
 
 ## Wire access
@@ -138,6 +138,20 @@ are atomic per file and newly created files are rolled back on a mid-run write f
 Path validation assumes the output directory is not concurrently mutated; it is not a
 race-resistant filesystem sandbox.
 
+Each struct's builder is one block after its reader, so reader output is unchanged; nested
+structs' and groups' builders nest inside it. Builders wrap a `StructBuilder` and conform to
+the generated-code-only `CapnpStructBuilder`, whose static sizes let
+`MessageBuilder.initRoot(_:)` and `init…` methods allocate the right layout. A group builder
+is a `reborrow()` of its parent's view. Accessors are methods named after the field (`foo()`,
+`setFoo(_:)`, `initFoo()`, `clearFoo()`), and a name used twice in one builder, or a builder
+type name that collides with a sibling, is diagnosed. Setting a union member first zeroes
+every member's storage (data bits, pointer subtrees, a group's fields and own discriminant),
+then writes the discriminant; this is stricter than C++, which leaves inactive members'
+bits. Text, data and list fields get no builder methods yet. `ci/check-readers.py` holds
+builders to the C++ encoder in reverse: each Swift-built message must equal `capnp encode` of
+the same content in canonical form, decode to the same text, and leave every word that no
+pointer reaches zero, which canonical form alone cannot see.
+
 File IDs namespace generated readers, which emit `public import CapnpRuntime` so
 consumers enabling `InternalImportsByDefault` can expose generated types directly. Unions
 use a raw discriminant enum without borrowed associated values; group readers share the
@@ -147,7 +161,7 @@ storage in the runtime or generated output.
 
 ## Validation boundaries
 
-Host tests (64 tests, 97.8% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
+Host tests (65 tests, 97.8% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
 packed framing (hand-packed frames, including boundary-crossing runs and hostile tables),
 far pointers, all list encodings, nested generic lists, UTF-8/Span/Iterable blob views,
 malformed ranges, shared budgets, nesting, and single- and multi-segment deterministic
@@ -155,7 +169,7 @@ malformed traversal, and the builder answer key (hand-computed frames, re-initia
 out-of-space sweep with guard bytes at aligned and unaligned offsets, limits). `ci/check-readers.py` uses the upstream C++ compiler for end-to-end
 fixtures, unpacks the committed `capnp encode --packed` form of each oracle message and
 requires it to equal the unpacked encoding byte for byte, runs output-boundary hardening tests (lexical/symlink escapes, collisions, and
-read-only rollback), delegates the 25-fixture `ci/check-compile-fail.py` suite, and
+read-only rollback), delegates the 35-fixture `ci/check-compile-fail.py` suite, and
 compiles generated readers against a separately compiled Embedded runtime.
 `ci/check-cross.py` roots that generated path in an exported C function, `ci/check-link.sh`
 links a bare-metal ARMv7E-M firmware image against `stubs.c` only and reports both ELF

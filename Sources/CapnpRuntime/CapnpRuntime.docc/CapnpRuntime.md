@@ -18,9 +18,9 @@ Reads are lazy and fail soft — a malformed field returns its schema default an
 the *first* error on the arena, rather than throwing or crashing partway through a
 message. Check ``Arena/error`` after you've read what you need.
 
-Writing messages is arriving in v2: ``MessageBuilder`` already builds structs and scalars into
-caller storage, with the same allocation-free, compiler-checked model, but generated builders,
-text, data and lists are not in yet. RPC is out of scope. The
+Writing messages is arriving in v2: generated builders and ``MessageBuilder`` build structs,
+scalars, enums, groups and unions into caller storage, with the same allocation-free,
+compiler-checked model. Text, data and list fields are not in yet. RPC is out of scope. The
 [package README](https://github.com/hooman/capnproto-swift#readme) has the current status.
 
 ## Topics
@@ -57,6 +57,7 @@ source-stable within a minor release, but they are not designed as a hand-writte
 Read messages through generated readers where you can.
 
 - ``CapnpStructReader``
+- ``CapnpStructBuilder``
 - ``CapnpListElement``
 - ``CapnpPrimitive``
 - ``CapnpEnum``
