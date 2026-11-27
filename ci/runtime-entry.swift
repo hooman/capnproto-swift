@@ -49,3 +49,47 @@ public func capnpEmbeddedPackedProbe(
     _ = consume storage
     return unsafe capnpEmbeddedProbe(UnsafeRawPointer(output), written)
 }
+
+/// Build a message into caller storage (D-18) with every scalar store, nested, zero-sized,
+/// re-initialized and cleared structs, then read it back through an Arena. Returns the root
+/// value plus the frame size on success, or UInt64.max on any build failure, so the
+/// allocation audits and the firmware link cover the builder path.
+@c(capnp_embedded_builder_probe)
+public func capnpEmbeddedBuilderProbe(_ output: UnsafeMutableRawPointer, _ capacity: Int)
+    -> UInt64
+{
+    let storage = unsafe MutableRawSpan(
+        _unsafeBytes: UnsafeMutableRawBufferPointer(start: output, count: capacity))
+    var message = MessageBuilder(storage: storage)
+    do {
+        var root = message.initRoot(dataWords: 6, pointerCount: 2)
+        root.setData(UInt8(1), at: 0, default: 0)
+        root.setData(Int8(-1), at: 1, default: 0)
+        root.setData(UInt16(2), at: 1, default: 0)
+        root.setData(UInt32(3), at: 1, default: 0)
+        root.setData(Int16(-2), at: 4, default: 0)
+        root.setData(true, at: 80, default: false)
+        root.setData(Int32(-3), at: 3, default: 0)
+        root.setData(Float(1.5), at: 4, default: 0)
+        root.setData(Double(2.5), at: 3, default: 0)
+        root.setData(Int64(-4), at: 4, default: 0)
+        root.setData(UInt64(7), at: 5, default: 0)
+        do {
+            var child = root.initStruct(at: 0, dataWords: 1, pointerCount: 0)
+            child.setData(UInt64(9), at: 0, default: 0)
+        }
+        _ = root.initStruct(at: 1, dataWords: 0, pointerCount: 0)
+        root.clearPointer(at: 1)
+        do {
+            var again = root.initStruct(at: 0, dataWords: 1, pointerCount: 0)
+            again.setData(again.data(at: 0, default: UInt64(0)) &+ 1, at: 0, default: 0)
+        }
+    }
+    guard message.error == .none else { return .max }
+    let arena = Arena(framedBytes: message.framedBytes)
+    let value = arena.withRoot { root in
+        root.data(at: 5, default: UInt64(0))
+            &+ root.pointerField(at: 0).structure().data(at: 0, default: UInt64(0))
+    }
+    return value &+ widen(message.requiredByteCount)
+}

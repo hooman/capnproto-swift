@@ -29,6 +29,11 @@ public protocol CapnpPrimitive {
     /// Caller must validate the complete element range in `span` before calling.
     /// `bit` is a multiple of 8 for every supported type except Bool.
     static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default: Self) -> Self
+
+    /// Store `value` XOR `default` at carrier-relative `bit` (builders, D-18).
+    /// Caller must validate the complete element range in `span` before calling.
+    static func storeMasked(
+        _ value: Self, into span: inout MutableRawSpan, atBitOffset bit: Int, default: Self)
 }
 
 // MARK: - Integers
@@ -48,6 +53,14 @@ extension CapnpPrimitive where Self: FixedWidthInteger & ConvertibleFromBytes {
         -> Self
     {
         span.load(fromByteOffset: bit / 8, as: Self.self, .littleEndian) ^ d
+    }
+}
+
+extension CapnpPrimitive where Self: FixedWidthInteger & ConvertibleToBytes & BitwiseCopyable {
+    public static func storeMasked(
+        _ value: Self, into span: inout MutableRawSpan, atBitOffset bit: Int, default d: Self
+    ) {
+        span.storeBytes(of: value ^ d, toByteOffset: bit / 8, as: Self.self, .littleEndian)
     }
 }
 
@@ -72,6 +85,12 @@ extension Float: CapnpPrimitive {
         let raw = span.load(fromByteOffset: bit / 8, as: UInt32.self, .littleEndian)
         return Float(bitPattern: raw ^ d.bitPattern)
     }
+    public static func storeMasked(
+        _ value: Float, into span: inout MutableRawSpan, atBitOffset bit: Int, default d: Float
+    ) {
+        let raw = value.bitPattern ^ d.bitPattern
+        span.storeBytes(of: raw, toByteOffset: bit / 8, as: UInt32.self, .littleEndian)
+    }
 }
 
 extension Double: CapnpPrimitive {
@@ -83,6 +102,12 @@ extension Double: CapnpPrimitive {
     {
         let raw = span.load(fromByteOffset: bit / 8, as: UInt64.self, .littleEndian)
         return Double(bitPattern: raw ^ d.bitPattern)
+    }
+    public static func storeMasked(
+        _ value: Double, into span: inout MutableRawSpan, atBitOffset bit: Int, default d: Double
+    ) {
+        let raw = value.bitPattern ^ d.bitPattern
+        span.storeBytes(of: raw, toByteOffset: bit / 8, as: UInt64.self, .littleEndian)
     }
 }
 
@@ -98,6 +123,14 @@ extension Bool: CapnpPrimitive {
         let byte = span.load(fromByteOffset: bit / 8, as: UInt8.self)
         let isSet = (byte >> UInt8(bit % 8)) & 1 == 1
         return isSet != d
+    }
+    public static func storeMasked(
+        _ value: Bool, into span: inout MutableRawSpan, atBitOffset bit: Int, default d: Bool
+    ) {
+        let mask = UInt8(1) << UInt8(bit % 8)
+        let byte = span.bytes.load(fromByteOffset: bit / 8, as: UInt8.self)
+        let stored = value != d ? byte | mask : byte & ~mask
+        span.storeBytes(of: stored, toByteOffset: bit / 8, as: UInt8.self)
     }
 }
 

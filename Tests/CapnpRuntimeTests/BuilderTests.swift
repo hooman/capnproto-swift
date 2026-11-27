@@ -55,7 +55,9 @@ private func build(
         error = message.error
         required = message.requiredByteCount
         let bytes = message.framedBytes
-        for i in 0..<bytes.byteCount { framed.append(bytes.load(fromByteOffset: i, as: UInt8.self)) }
+        for i in 0..<bytes.byteCount {
+            framed.append(bytes.load(fromByteOffset: i, as: UInt8.self))
+        }
     }
     return Built(
         framed: framed, error: error, required: required, buffer: buffer, offset: offset,
