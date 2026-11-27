@@ -420,3 +420,38 @@ private struct PairOfPointers: ~Copyable, ~Escapable, CapnpStructBuilder {
     @_lifetime(copy builder)
     init(_ builder: consuming StructBuilder) { self.builder = builder }
 }
+
+/// Element sizes the wire cannot hold: a struct section is at most 0xFFFF words or pointers.
+private struct WideBuilder: ~Copyable, ~Escapable, CapnpStructBuilder {
+    var builder: StructBuilder
+    static var _capnpDataWords: Int { 0x1_0000 }
+    static var _capnpPointerCount: Int { 0 }
+    @_lifetime(copy builder)
+    init(_ builder: consuming StructBuilder) { self.builder = builder }
+}
+
+private struct NegativeBuilder: ~Copyable, ~Escapable, CapnpStructBuilder {
+    var builder: StructBuilder
+    static var _capnpDataWords: Int { 1 }
+    static var _capnpPointerCount: Int { -1 }
+    @_lifetime(copy builder)
+    init(_ builder: consuming StructBuilder) { self.builder = builder }
+}
+
+extension ListBuilderTests {
+    /// Answer key, written before the fix: a struct list checks its element sizes as
+    /// `initStruct` does. Before, the tag word truncated a 0x1_0000-word data section to 0,
+    /// and a negative size could shrink the allocation.
+    @Test func structListElementSizesAreChecked() {
+        let wide = build { root in
+            _ = root.initList(StructListBuilder<WideBuilder>.self, at: 0, count: 1)
+        }
+        #expect(wide.error == .invalidLayout)
+        #expect(wide.framed == frame([rootWord(), 0]))
+        let negative = build { root in
+            _ = root.initList(StructListBuilder<NegativeBuilder>.self, at: 0, count: 2)
+        }
+        #expect(negative.error == .invalidLayout)
+        #expect(negative.framed == frame([rootWord(), 0]))
+    }
+}
