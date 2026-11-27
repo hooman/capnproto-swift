@@ -298,6 +298,8 @@ struct ListBuilderTests {
 
     @Test func countsAndReadsWithoutStorage() {
         // After .outOfSpace every view has no storage: reads give zero, writes do nothing.
+        // Each keeps its requested count, so loops over `count` still count the subtrees
+        // (failedListKeepsItsCountForTheRetry); until F3 this test expected all zeros.
         var counts: [Int] = []
         let built = build(capacity: 24) { root in
             do {
@@ -324,7 +326,7 @@ struct ListBuilderTests {
             }
         }
         #expect(built.error == .outOfSpace)
-        #expect(counts == [0, 0, 0, 0, 0, 0])
+        #expect(counts == [4, 0, 1, 1, 1, 2])
     }
 
     @Test func reinitializingZeroesEveryListEncoding() {
@@ -419,4 +421,86 @@ private struct PairOfPointers: ~Copyable, ~Escapable, CapnpStructBuilder {
     static var _capnpPointerCount: Int { 2 }
     @_lifetime(copy builder)
     init(_ builder: consuming StructBuilder) { self.builder = builder }
+}
+
+/// Element sizes the wire cannot hold: a struct section is at most 0xFFFF words or pointers.
+private struct WideBuilder: ~Copyable, ~Escapable, CapnpStructBuilder {
+    var builder: StructBuilder
+    static var _capnpDataWords: Int { 0x1_0000 }
+    static var _capnpPointerCount: Int { 0 }
+    @_lifetime(copy builder)
+    init(_ builder: consuming StructBuilder) { self.builder = builder }
+}
+
+private struct NegativeBuilder: ~Copyable, ~Escapable, CapnpStructBuilder {
+    var builder: StructBuilder
+    static var _capnpDataWords: Int { 1 }
+    static var _capnpPointerCount: Int { -1 }
+    @_lifetime(copy builder)
+    init(_ builder: consuming StructBuilder) { self.builder = builder }
+}
+
+extension ListBuilderTests {
+    /// Answer key, written before the fix: a struct list checks its element sizes as
+    /// `initStruct` does. Before, the tag word truncated a 0x1_0000-word data section to 0,
+    /// and a negative size could shrink the allocation. A failed build frames nothing, so the
+    /// check is that no bytes after the root (storage 16..<24) were touched.
+    @Test func structListElementSizesAreChecked() {
+        let wide = build { root in
+            _ = root.initList(StructListBuilder<WideBuilder>.self, at: 0, count: 1)
+        }
+        #expect(wide.error == .invalidLayout)
+        #expect(wide.framed.isEmpty)
+        #expect(wide.buffer[24..<32].allSatisfy { $0 == 0xAA })
+        let negative = build { root in
+            _ = root.initList(StructListBuilder<NegativeBuilder>.self, at: 0, count: 2)
+        }
+        #expect(negative.error == .invalidLayout)
+        #expect(negative.framed.isEmpty)
+        #expect(negative.buffer[24..<32].allSatisfy { $0 == 0xAA })
+    }
+}
+
+extension ListBuilderTests {
+    /// Answer key, written before the fix (comment-review eval 1, finding F3). A list that
+    /// fails for lack of space keeps its count, so a caller that loops over `count` still has
+    /// every element's subtree counted, and `requiredByteCount` stays the exact size to retry
+    /// with. Before, such a list reported `count == 0`, the loop did nothing, and the retry
+    /// failed again.
+    ///
+    /// Sizes: header 8 + root pointer 8 + root struct (1 pointer) 8 = 24. Three texts: list
+    /// body 3 words (24), and each "ab" + NUL is one word (24), so 72 in all. Two `NodeBuilder`
+    /// elements: tag 8 + 2 words (16), and each "x" + NUL is one word (16), so 64 in all.
+    @Test func failedListKeepsItsCountForTheRetry() {
+        func texts(_ root: inout StructBuilder) {
+            var list = root.initList(TextListBuilder.self, at: 0, count: 3)
+            #expect(list.count == 3)
+            for i in 0..<list.count { list.setElement("ab".utf8Span, at: i) }
+        }
+        for capacity in stride(from: 16, through: 80, by: 8) {
+            let built = build(capacity: capacity, texts)
+            if capacity < 72 {
+                #expect(built.error == .outOfSpace, "capacity \(capacity)")
+                #expect(built.required == 72, "capacity \(capacity)")
+            } else {
+                #expect(built.error == .none, "capacity \(capacity)")
+                #expect(built.framed.count == 72, "capacity \(capacity)")
+            }
+        }
+
+        func nodes(_ root: inout StructBuilder) {
+            var list = root.initList(StructListBuilder<NodeBuilder>.self, at: 0, count: 2)
+            #expect(list.count == 2)
+            for i in 0..<list.count {
+                var node = list.element(at: i)
+                node.builder.setText("x".utf8Span, at: 0)
+            }
+        }
+        let short = build(capacity: 24, nodes)
+        #expect(short.error == .outOfSpace)
+        #expect(short.required == 64)
+        let retry = build(capacity: short.required, nodes)
+        #expect(retry.error == .none)
+        #expect(retry.framed.count == 64)
+    }
 }

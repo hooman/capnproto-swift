@@ -32,7 +32,9 @@ public protocol CapnpListBuilder: ~Copyable, ~Escapable {
 }
 
 /// Where a list's elements are. `start < 0` marks a list with no storage, handed out after a
-/// failure: writes to it are no-ops.
+/// failure: writes to it are no-ops. Once its count and shape were valid, it keeps its count,
+/// so a caller that loops over `count` still has every element's subtree counted, and
+/// `requiredByteCount` stays the exact size to retry with.
 struct ListLayout {
     /// Storage offset of the first element (after the tag word, for inline composite).
     let start: Int
@@ -43,8 +45,8 @@ struct ListLayout {
     var live: Bool { start >= 0 }
     var compositeWords: Int { shape.dataWords + shape.pointerCount }
 
-    static func phantom(_ shape: ListShape, depth: Int) -> ListLayout {
-        ListLayout(start: -1, count: 0, shape: shape, depth: depth)
+    static func phantom(_ shape: ListShape, depth: Int, count: Int = 0) -> ListLayout {
+        ListLayout(start: -1, count: count, shape: shape, depth: depth)
     }
 }
 
@@ -315,6 +317,16 @@ extension Builder {
             return phantom
         }
         let composite = shape.elementSize == .inlineComposite
+        // A hand-written CapnpStructBuilder can declare any sizes; the tag word holds 16 bits
+        // each, and a negative size would shrink the allocation.
+        guard
+            !composite
+                || (0...0xFFFF).contains(shape.dataWords)
+                    && (0...0xFFFF).contains(shape.pointerCount)
+        else {
+            state.fail(.invalidLayout)
+            return phantom
+        }
         guard depth + (composite ? 1 : 0) <= builderNestingLimit else {
             state.fail(.nestingLimit)
             return phantom
@@ -343,17 +355,22 @@ extension Builder {
         } else {
             countField = count
         }
+        // From here the count and shape are valid: a failed list keeps its count (ListLayout).
+        let counted = ListLayout.phantom(shape, depth: depth, count: count)
         guard slot >= 0 else {
             _ = state.allocate(words: words)  // count only: a failure already happened
-            return phantom
+            return counted
         }
         zeroObject(in: &span, at: slot, used: state.used, depth: depth - 1)
-        guard let start = state.allocate(words: words) else { return phantom }
+        guard let start = state.allocate(words: words) else { return counted }
         var word = start
         while word < start + words * 8 {
             span.storeBytes(of: UInt64(0), toByteOffset: word, as: UInt64.self)
             word += 8
         }
+        // The truncations below drop no bits: the segment is under 2^29 words and the list
+        // follows its pointer (builderCapacity), counts are below 2^29, and the element
+        // sizes were checked above.
         span.storeBytes(
             of: UInt32(truncatingIfNeeded: (state.used - 8) / 8), toByteOffset: 4,
             as: UInt32.self, .littleEndian)

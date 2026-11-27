@@ -18,7 +18,8 @@ public enum BuildError: UInt8 {
     case none
     /// The storage is too small. `MessageBuilder.requiredByteCount` gives the size needed.
     case outOfSpace
-    /// A list or text is longer than the wire format allows (lists arrive in a later release).
+    /// A list, text or data has more than 2^29 - 1 elements, or an inline-composite list more
+    /// than 2^29 - 1 words: the wire format's limits.
     case listTooLong
     /// A struct would be nested deeper than 64 levels (the root is level 1), the default
     /// `ReaderOptions` nesting limit, so a default reader could not read it.
@@ -31,10 +32,19 @@ public enum BuildError: UInt8 {
 /// Deepest struct a builder creates; matches `ReaderOptions.defaultNestingLimit`.
 let builderNestingLimit = 64
 
+/// Usable bytes of a builder storage of `byteCount` bytes: whole words, at most
+/// `Int.max / 8` bytes so bit offsets fit an `Int`, and at most 2^29 words (4 GiB): the
+/// header word plus a 2^29 - 1 word segment. Every object lies after its pointer in that
+/// one segment, so every near-pointer offset is below 2^29 and fits the signed 30-bit
+/// offset field (encoding.md "Structs"), and the segment size fits the 32-bit header field.
+/// A larger message needs far pointers and more segments, which this builder doesn't write.
+func builderCapacity(byteCount: Int) -> Int {
+    min(min(byteCount / 8, Int.max / 64), 1 << 29) * 8
+}
+
 /// Allocation state shared by a `MessageBuilder` and its views.
 struct BuildState: ~Copyable {
-    /// Usable storage bytes: whole words, capped so bit offsets fit an `Int` and the
-    /// segment size fits the 32-bit header field.
+    /// Usable storage bytes, from `builderCapacity(byteCount:)`.
     let capacity: Int
     /// Bytes handed out so far, header included.
     var used: Int
@@ -89,13 +99,12 @@ public struct MessageBuilder: ~Copyable, ~Escapable, ~Sendable {
     var state: BuildState
 
     /// Start an empty message in `storage`. It writes only the frame header and a null
-    /// root (16 bytes); the rest of `storage` is zeroed as it is allocated.
+    /// root (16 bytes); the rest of `storage` is zeroed as it is allocated. At most 4 GiB
+    /// of `storage` is used: one segment of 2^29 - 1 words, the most a near pointer can
+    /// span.
     @_lifetime(copy storage)
     public init(storage: consuming MutableRawSpan) {
-        // Cap at Int.max / 8 bytes (bit-addressed loads) and at 2^32 - 1 segment words.
-        var words = min(storage.byteCount, Int.max / 8) / 8
-        if widen(words) > widen(UInt32.max) { words = Int(bitPattern: UInt(UInt32.max)) }
-        let capacity = words * 8
+        let capacity = builderCapacity(byteCount: storage.byteCount)
         var state = BuildState(capacity: capacity, used: 0, required: 16, error: .none)
         if capacity >= 16 {
             // Header: segment count - 1 = 0, segment size 1 word (the null root pointer).
@@ -255,6 +264,8 @@ enum Builder {
             span.storeBytes(of: UInt64(0), toByteOffset: word, as: UInt64.self)
             word += 8
         }
+        // The truncations below drop no bits: the segment is under 2^29 words and the
+        // object follows its pointer (builderCapacity), and the sizes were checked above.
         span.storeBytes(
             of: UInt32(truncatingIfNeeded: (state.used - 8) / 8), toByteOffset: 4,
             as: UInt32.self, .littleEndian)

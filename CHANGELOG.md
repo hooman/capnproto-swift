@@ -18,7 +18,8 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   `StructBuilder.initStruct(at:dataWords:pointerCount:)` return exclusive views, and
   `setData(_:at:default:)`, `data(at:default:)` and `clearPointer(at:)` write and read
   fields. Errors are sticky (`BuildError`) and never trap; `requiredByteCount` is the exact
-  size to retry with after `.outOfSpace`. `framedBytes` opens directly in `Arena`.
+  size to retry with after `.outOfSpace`. `framedBytes` opens directly in `Arena`. A
+  message uses at most 4 GiB of storage, so every pointer offset fits its field.
 - `capnpc-swift` generates a builder beside each struct's reader (`ExampleBuilder` beside
   `ExampleReader`) for scalars, enums, nested structs, groups and unions:
   `message.initRoot(ExampleBuilder.self)`, then `setFoo(_:)`, `foo()`, `initFoo()` and
@@ -35,7 +36,9 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   `initList(_:at:count:)`, and the typed list builders `PrimitiveListBuilder`,
   `EnumListBuilder`, `VoidListBuilder`, `TextListBuilder`, `DataListBuilder`,
   `StructListBuilder` and `ListListBuilder` (`CapnpListBuilder`, generated-code only). More
-  than 2^29 − 1 elements is `.listTooLong`. Swift builders rebuild every C++ oracle message
+  than 2^29 − 1 elements is `.listTooLong`, and a struct list whose element sizes are
+  outside 0...65535 is `.invalidLayout`. A list view that fails for lack of space keeps
+  its count, so `requiredByteCount` still counts what a loop over `count` writes. Swift builders rebuild every C++ oracle message
   of the test suite byte-equivalently.
 - `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
   closed to outside conformances.

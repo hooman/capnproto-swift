@@ -231,7 +231,8 @@ func buildExample() -> UInt64? {
   with when the same build steps run again. `.nestingLimit` refuses a struct more than 64
   levels deep, the default reader's limit (a list costs a level, as in the reader).
   `.listTooLong` refuses more than 2^29 − 1 elements. `.invalidLayout` reports an
-  out-of-range field, element or size.
+  out-of-range field, element or size. A message uses at most 4 GiB of storage (one
+  segment); a build that needs more ends in `.outOfSpace`.
 - **Wire rules.** Scalars are stored XOR their schema default. Allocated space is zeroed,
   and storage needn't be aligned or zeroed. Setting a union member zeroes every member's
   storage first, so no inactive member's bits or subtree survive. Re-initializing or
