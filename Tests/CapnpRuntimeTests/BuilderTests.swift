@@ -371,4 +371,24 @@ struct BuilderTests {
         #expect(error == .none)
         #expect(values == (0x1111, 0x2222, 0x3333))
     }
+
+    /// Answer key for the segment cap, written before the fix. A near pointer's offset is a
+    /// signed 30-bit word count (encoding.md "Structs"), so it reaches at most 2^29 - 1 words
+    /// forward. Capping the frame at 2^29 words (the header word plus a 2^29 - 1 word segment)
+    /// keeps every forward offset within that range. Without the cap a buffer over 4 GiB let
+    /// an object land beyond the field's reach, and the truncated offset pointed elsewhere.
+    @Test func capacityKeepsEveryOffsetInRange() {
+        #expect(builderCapacity(byteCount: 0) == 0)
+        #expect(builderCapacity(byteCount: 15) == 8)
+        #expect(builderCapacity(byteCount: 17) == 16)
+        if Int.bitWidth == 64 {
+            let cap = 1 << 32  // 2^29 words
+            #expect(builderCapacity(byteCount: cap - 1) == cap - 8)
+            #expect(builderCapacity(byteCount: cap) == cap)
+            #expect(builderCapacity(byteCount: cap + 8) == cap)
+            #expect(builderCapacity(byteCount: Int.max) == cap)
+        } else {
+            #expect(builderCapacity(byteCount: Int.max) == Int.max / 8 / 8 * 8)
+        }
+    }
 }
