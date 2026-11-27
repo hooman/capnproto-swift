@@ -315,6 +315,16 @@ extension Builder {
             return phantom
         }
         let composite = shape.elementSize == .inlineComposite
+        // A hand-written CapnpStructBuilder can declare any sizes; the tag word holds 16 bits
+        // each, and a negative size would shrink the allocation.
+        guard
+            !composite
+                || (0...0xFFFF).contains(shape.dataWords)
+                    && (0...0xFFFF).contains(shape.pointerCount)
+        else {
+            state.fail(.invalidLayout)
+            return phantom
+        }
         guard depth + (composite ? 1 : 0) <= builderNestingLimit else {
             state.fail(.nestingLimit)
             return phantom
@@ -354,6 +364,9 @@ extension Builder {
             span.storeBytes(of: UInt64(0), toByteOffset: word, as: UInt64.self)
             word += 8
         }
+        // The truncations below drop no bits: the segment is under 2^29 words and the list
+        // follows its pointer (builderCapacity), counts are below 2^29, and the element
+        // sizes were checked above.
         span.storeBytes(
             of: UInt32(truncatingIfNeeded: (state.used - 8) / 8), toByteOffset: 4,
             as: UInt32.self, .littleEndian)
