@@ -160,6 +160,6 @@ for name, flags in variants.items():
         gen_out = run([*command, wasm], data=bytes([96, 0]) + bytes(6))
         assert re.search(r'PASS mode=96 checks=3\b', gen_out), f'{name}/{runner}/mode=96: {gen_out!r}'
         print(f'PASS wasm {name} under {runner}: {len(messages)} aligned + 2 unaligned oracle messages, '
-              f'{len(messages)} packed, 8 32-bit edge checks, 5 packed, 7 builder and 2 generated-builder ({wasm.stat().st_size} bytes)',
+              f'{len(messages)} packed, 8 32-bit edge checks, 5 packed, 8 builder and 3 generated-builder ({wasm.stat().st_size} bytes)',
               flush=True)
 print('WASM CHECK: PASS', flush=True)

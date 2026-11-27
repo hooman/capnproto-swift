@@ -74,6 +74,11 @@ private struct NodeBuilder: ~Copyable, ~Escapable, CapnpStructBuilder {
     init(_ builder: consuming StructBuilder) { self.builder = builder }
 }
 
+private enum Shade: UInt16, CapnpEnum {
+    case light = 0
+    case dark = 1
+}
+
 @Suite("List builder answer key")
 struct ListBuilderTests {
     @Test func text() {
@@ -279,6 +284,102 @@ struct ListBuilderTests {
                 #expect(built.buffer[(offset + capacity)...].allSatisfy { $0 == 0xAA })
             }
         }
+    }
+
+    @Test func enumList() {
+        let built = build { root in
+            var shades = root.initList(EnumListBuilder<Shade>.self, at: 0, count: 2)
+            shades.setElement(.dark, at: 1)
+            #expect(shades.count == 2 && shades.element(at: 1) == .dark)
+            #expect(shades.element(at: 0) == .light && shades.element(at: 5) == .light)
+        }
+        #expect(built.framed == frame([rootWord(), 0x0000_0013_0000_0001, 0x0001_0000]))
+    }
+
+    @Test func countsAndReadsWithoutStorage() {
+        // After .outOfSpace every view has no storage: reads give zero, writes do nothing.
+        var counts: [Int] = []
+        let built = build(capacity: 24) { root in
+            do {
+                var numbers = root.initList(PrimitiveListBuilder<UInt64>.self, at: 0, count: 4)
+                numbers.setElement(1, at: 0)
+                counts += [numbers.count, Int(numbers.element(at: 0))]
+            }
+            do {
+                var texts = root.initList(TextListBuilder.self, at: 0, count: 1)
+                texts.setElement("x".utf8Span, at: 0)
+                counts.append(texts.count)
+            }
+            do {
+                var blobs = root.initList(DataListBuilder.self, at: 0, count: 1)
+                let one: [UInt8] = [1]
+                blobs.setElement(one.span, at: 0)
+                counts.append(blobs.count)
+            }
+            do {
+                var matrix = root.initList(ListListBuilder<VoidListBuilder>.self, at: 0, count: 1)
+                counts.append(matrix.count)
+                let inner = matrix.initElement(at: 0, count: 2)
+                counts.append(inner.count)
+            }
+        }
+        #expect(built.error == .outOfSpace)
+        #expect(counts == [0, 0, 0, 0, 0, 0])
+    }
+
+    @Test func reinitializingZeroesEveryListEncoding() {
+        // Each encoding is replaced by a null-equivalent re-set; nothing may survive.
+        let built = build(pointers: 6) { root in
+            do {
+                var bits = root.initList(PrimitiveListBuilder<Bool>.self, at: 0, count: 70)
+                bits.setElement(true, at: 69)
+                var bytes = root.initList(PrimitiveListBuilder<UInt8>.self, at: 1, count: 9)
+                bytes.setElement(0xFF, at: 8)
+                var halves = root.initList(PrimitiveListBuilder<UInt16>.self, at: 2, count: 5)
+                halves.setElement(0xFFFF, at: 4)
+                var longs = root.initList(PrimitiveListBuilder<Int64>.self, at: 3, count: 2)
+                longs.setElement(-1, at: 1)
+                var voids = root.initList(VoidListBuilder.self, at: 4, count: 3)
+                _ = voids.count
+                var nodes = root.initList(StructListBuilder<NodeBuilder>.self, at: 5, count: 2)
+                var node = nodes.element(at: 1)
+                node.builder.setText("deep".utf8Span, at: 0)
+                _ = node.builder.initList(PrimitiveListBuilder<UInt8>.self, at: 0, count: 0)
+            }
+            for index in 0..<6 { root.clearPointer(at: index) }
+        }
+        #expect(built.error == .none)
+        // Root pointer, then everything else zero.
+        let words = stride(from: 16, to: built.framed.count, by: 8).map { at in
+            built.framed[at..<at + 8].reversed().reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+        }
+        #expect(words.allSatisfy { $0 == 0 })
+    }
+
+    /// Nest struct lists below `node`: each list costs a level and its element another.
+    private func nest(_ node: inout NodeBuilder, depth: Int, until limit: Int) {
+        guard depth < limit else { return }
+        var list = node.builder.initList(StructListBuilder<NodeBuilder>.self, at: 0, count: 1)
+        var element = list.element(at: 0)
+        nest(&element, depth: depth + 2, until: limit)
+    }
+
+    @Test func listDepthCountsLikeTheReader() {
+        // A list costs a level and its struct elements another, as in the reader. The root
+        // is level 1, so its list is 2 and the element 3; elements at 63 are allowed, and
+        // a list at 64 cannot hold struct elements at 65.
+        let fits = build { root in
+            var list = root.initList(StructListBuilder<NodeBuilder>.self, at: 0, count: 1)
+            var node = list.element(at: 0)
+            nest(&node, depth: 3, until: 63)
+        }
+        #expect(fits.error == .none)
+        let tooDeep = build(capacity: 4096) { root in
+            var list = root.initList(StructListBuilder<NodeBuilder>.self, at: 0, count: 1)
+            var node = list.element(at: 0)
+            nest(&node, depth: 3, until: 65)
+        }
+        #expect(tooDeep.error == .nestingLimit)
     }
 
     @Test func roundTripThroughTheReader() {

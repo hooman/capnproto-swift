@@ -175,6 +175,6 @@ for name in args.target or list(TARGETS):
         assert status != 0 and 'FAULT' in output and 'PASS' not in output, \
             f'{name}: negative control "{label}" did not fail: exit {status}: {output!r}'
     print(f'PASS qemu {name} ({" ".join(target["qemu"][:3])}): {len(messages)} aligned + 2 unaligned '
-          f'oracle messages, {len(messages)} packed, 8 32-bit edge checks, 5 packed, 7 builder and 2 generated-builder; '
+          f'oracle messages, {len(messages)} packed, 8 32-bit edge checks, 5 packed, 8 builder and 3 generated-builder; '
           f'2 negative controls fault; flash={flash} B, max stack={stack} B', flush=True)
 print('QEMU CHECK: PASS', flush=True)

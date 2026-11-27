@@ -15,7 +15,7 @@ Copying a view copies positions and lifetime dependencies, not the message or li
 This is deliberate: computed properties and borrow accessors on noncopyable views still
 synthesize coroutine allocator calls on verified Swift 6.4.x and `main` toolchains.
 Copyable views compile without those allocator references and keep the compiler-enforced
-lifetime proof. Arena ownership remains unique. The 35-fixture `ci/check-compile-fail.py`
+lifetime proof. Arena ownership remains unique. The 38-fixture `ci/check-compile-fail.py`
 suite guards lifetime, noncopyability, non-`Sendable`, and strict memory safety contracts.
 
 ## Wire access
@@ -98,7 +98,16 @@ struct is encoded with offset −1. Re-initializing a pointer, or `clearPointer`
 the old object and its subtree recursively; recursion is bounded because no struct deeper
 than 64 levels (`.nestingLimit`, the default reader limit) is ever built. After a failure,
 views carry their sizes but no storage: writes are no-ops, and allocation keeps counting, so
-`requiredByteCount` is exact for a retry. Scalars are stored by `CapnpPrimitive.storeMasked`,
+`requiredByteCount` is exact for a retry. Lists are allocated whole by `Builder.linkList`: element counts and
+inline-composite word totals are checked against 2^29 − 1 before any multiplication
+(`.listTooLong`), word counts are derived by division so they cannot overflow, and a byte
+size that would overflow a 32-bit `Int` is `.outOfSpace`. Text is a byte list with its NUL
+and data has none; both are copied a word at a time. Typed list builders
+(`PrimitiveListBuilder`, `EnumListBuilder`, `VoidListBuilder`, `TextListBuilder`,
+`DataListBuilder`, `StructListBuilder`, `ListListBuilder`) wrap an untyped `ListBuilder` and
+conform to `CapnpListBuilder`, whose static `ListShape` tells `initList` what to allocate.
+Zeroing an old object follows list pointers too: pointer lists' elements and inline-composite
+elements' pointer sections are zeroed first, then the body. Scalars are stored by `CapnpPrimitive.storeMasked`,
 XOR the default; integer and float stores use the SE-0525 byte-order `storeBytes`, and words
 are written as two `UInt32` halves to avoid 64-bit shifts on 32-bit targets.
 
@@ -147,10 +156,12 @@ is a `reborrow()` of its parent's view. Accessors are methods named after the fi
 type name that collides with a sibling, is diagnosed. Setting a union member first zeroes
 every member's storage (data bits, pointer subtrees, a group's fields and own discriminant),
 then writes the discriminant; this is stricter than C++, which leaves inactive members'
-bits. Text, data and list fields get no builder methods yet. `ci/check-readers.py` holds
+bits. Text setters take a `UTF8Span` and data setters a `Span<UInt8>`; list fields return a
+typed list builder from `initFoo(count:)`. `ci/check-readers.py` holds
 builders to the C++ encoder in reverse: each Swift-built message must equal `capnp encode` of
 the same content in canonical form, decode to the same text, and leave every word that no
-pointer reaches zero, which canonical form alone cannot see.
+pointer reaches zero, which canonical form alone cannot see. With text, data and lists, the
+same check rebuilds all 9 C++ oracle messages of the reader fixture from generated builders.
 
 File IDs namespace generated readers, which emit `public import CapnpRuntime` so
 consumers enabling `InternalImportsByDefault` can expose generated types directly. Unions
@@ -161,7 +172,7 @@ storage in the runtime or generated output.
 
 ## Validation boundaries
 
-Host tests (65 tests, 97.8% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
+Host tests (88 tests, 97.4% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
 packed framing (hand-packed frames, including boundary-crossing runs and hostile tables),
 far pointers, all list encodings, nested generic lists, UTF-8/Span/Iterable blob views,
 malformed ranges, shared budgets, nesting, and single- and multi-segment deterministic
@@ -169,7 +180,7 @@ malformed traversal, and the builder answer key (hand-computed frames, re-initia
 out-of-space sweep with guard bytes at aligned and unaligned offsets, limits). `ci/check-readers.py` uses the upstream C++ compiler for end-to-end
 fixtures, unpacks the committed `capnp encode --packed` form of each oracle message and
 requires it to equal the unpacked encoding byte for byte, runs output-boundary hardening tests (lexical/symlink escapes, collisions, and
-read-only rollback), delegates the 35-fixture `ci/check-compile-fail.py` suite, and
+read-only rollback), delegates the 38-fixture `ci/check-compile-fail.py` suite, and
 compiles generated readers against a separately compiled Embedded runtime.
 `ci/check-cross.py` roots that generated path in an exported C function, `ci/check-link.sh`
 links a bare-metal ARMv7E-M firmware image against `stubs.c` only and reports both ELF
