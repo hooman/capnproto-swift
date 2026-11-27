@@ -188,17 +188,22 @@ A `MessageBuilder` writes one single-segment framed message into storage you pro
 never allocates, and it writes nothing outside that storage.
 
 ```swift
-var storage = InlineArray<16, UInt64>(repeating: 0)  // or any MutableRawSpan
-var span = storage.mutableSpan
-var message = MessageBuilder(storage: span.mutableBytes)
-do {
-    var root = message.initRoot(dataWords: 1, pointerCount: 1)
-    root.setData(UInt32(42), at: 0, default: 0)
-    var child = root.initStruct(at: 0, dataWords: 1, pointerCount: 0)  // borrows root
-    child.setData(UInt64(7), at: 0, default: 0)
+func buildExample() -> UInt32? {
+    var storage = InlineArray<16, UInt64>(repeating: 0)  // or any MutableRawSpan
+    var span = storage.mutableSpan
+    var message = MessageBuilder(storage: span.mutableBytes)
+    do {
+        var root = message.initRoot(dataWords: 1, pointerCount: 1)
+        root.setData(UInt32(42), at: 0, default: 0)
+        var child = root.initStruct(at: 0, dataWords: 1, pointerCount: 0)  // borrows root
+        child.setData(UInt64(7), at: 0, default: 0)
+    }
+    guard message.error == .none else {
+        return nil  // .outOfSpace: retry with message.requiredByteCount bytes
+    }
+    let arena = Arena(framedBytes: message.framedBytes)  // read it back without copying
+    return arena.withRoot { $0.data(at: 0, default: UInt32(0)) }
 }
-guard message.error == .none else { /* .outOfSpace: retry with message.requiredByteCount */ }
-let arena = Arena(framedBytes: message.framedBytes)  // read it back without copying
 ```
 
 - **Exclusive views.** `MessageBuilder` and `StructBuilder` are `~Copyable, ~Escapable` and

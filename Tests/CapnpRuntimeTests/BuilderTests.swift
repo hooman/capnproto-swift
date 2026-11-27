@@ -307,6 +307,22 @@ struct BuilderTests {
         #expect(readError == .none)
         #expect(deepest == 1)
 
+        // Re-initializing the root zeroes the whole 64-level chain, down to the deepest body,
+        // where the zeroing recursion stops. The new root is zero-sized, so it needs no space.
+        do {
+            var span = storage.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 1, pointerCount: 1)
+                chain(&root, 63)
+            }
+            _ = message.initRoot(dataWords: 0, pointerCount: 0)
+            buildError = message.error
+        }
+        #expect(buildError == .none)
+        #expect(storage[1] == 0x0000_0000_FFFF_FFFC)
+        #expect(storage[2...].allSatisfy { $0 == 0 })
+
         let tooDeep = build(capacity: 4096) { message in
             var root = message.initRoot(dataWords: 1, pointerCount: 1)
             chain(&root, 64)

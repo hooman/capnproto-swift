@@ -159,6 +159,28 @@ func verify32BitBuilders() -> Int {
         precondition(readError == .none && deepest == 1)
     }
     do {
+        // Re-initializing the root zeroes the whole 64-level chain, down to the deepest body
+        // (the zeroing recursion's worst case, so the QEMU stack figure includes it).
+        var storage = InlineArray<136, UInt64>(repeating: 0)
+        var error = BuildError.invalidLayout
+        do {
+            var span = storage.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 1, pointerCount: 1)
+                buildChain(&root, 63)
+            }
+            _ = message.initRoot(dataWords: 0, pointerCount: 0)
+            error = message.error
+        }
+        precondition(error == .none && storage[1] == 0x0000_0000_FFFF_FFFC)
+        var word = 2
+        while word < 136 {
+            precondition(storage[word] == 0)
+            word += 1
+        }
+    }
+    do {
         // Fresh storage with room for 65 levels, so the limit, not space, stops it.
         var storage = InlineArray<136, UInt64>(repeating: 0)
         var span = storage.mutableSpan
