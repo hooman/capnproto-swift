@@ -123,6 +123,143 @@ public enum Capnp_9eb32e19f86f3a01 {
         }
     }
     @available(anyAppleOS 27, *)
+    public struct `ExampleBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 7 }
+        public static var _capnpPointerCount: Int { 11 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        /// Active union tag, or nil for a tag unknown to this schema version.
+        public func _capnpWhich() -> Capnp_9eb32e19f86f3a01.`ExampleReader`._CapnpWhich? {
+            .init(rawValue: _capnpBuilder.data(at: 18, default: UInt16(0)))
+        }
+        // Zero every union member's storage before another member is set.
+        private mutating func _capnpClearUnion() {
+            _capnpBuilder.setData(UInt32(0), at: 12, default: UInt32(0))
+            _capnpBuilder.clearPointer(at: 10)
+            _capnpBuilder.setData(UInt64(0), at: 6, default: UInt64(0))
+        }
+        public func `boolField`() -> Bool {
+            _capnpBuilder.data(at: 0, default: true)
+        }
+        public mutating func `setBoolField`(_ value: Bool) {
+            _capnpBuilder.setData(value, at: 0, default: true)
+        }
+        public func `i8`() -> Int8 {
+            _capnpBuilder.data(at: 1, default: Int8(-12))
+        }
+        public mutating func `setI8`(_ value: Int8) {
+            _capnpBuilder.setData(value, at: 1, default: Int8(-12))
+        }
+        public func `i16`() -> Int16 {
+            _capnpBuilder.data(at: 1, default: Int16(-1234))
+        }
+        public mutating func `setI16`(_ value: Int16) {
+            _capnpBuilder.setData(value, at: 1, default: Int16(-1234))
+        }
+        public func `i32`() -> Int32 {
+            _capnpBuilder.data(at: 1, default: Int32(-123456))
+        }
+        public mutating func `setI32`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 1, default: Int32(-123456))
+        }
+        public func `i64`() -> Int64 {
+            _capnpBuilder.data(at: 1, default: Int64(-1234567890123))
+        }
+        public mutating func `setI64`(_ value: Int64) {
+            _capnpBuilder.setData(value, at: 1, default: Int64(-1234567890123))
+        }
+        public func `u8`() -> UInt8 {
+            _capnpBuilder.data(at: 16, default: UInt8(250))
+        }
+        public mutating func `setU8`(_ value: UInt8) {
+            _capnpBuilder.setData(value, at: 16, default: UInt8(250))
+        }
+        public func `u16`() -> UInt16 {
+            _capnpBuilder.data(at: 9, default: UInt16(65000))
+        }
+        public mutating func `setU16`(_ value: UInt16) {
+            _capnpBuilder.setData(value, at: 9, default: UInt16(65000))
+        }
+        public func `u32`() -> UInt32 {
+            _capnpBuilder.data(at: 5, default: UInt32(4000000000))
+        }
+        public mutating func `setU32`(_ value: UInt32) {
+            _capnpBuilder.setData(value, at: 5, default: UInt32(4000000000))
+        }
+        public func `u64`() -> UInt64 {
+            _capnpBuilder.data(at: 3, default: UInt64(18000000000000000000))
+        }
+        public mutating func `setU64`(_ value: UInt64) {
+            _capnpBuilder.setData(value, at: 3, default: UInt64(18000000000000000000))
+        }
+        public func `f32`() -> Float {
+            _capnpBuilder.data(at: 8, default: Float(bitPattern: 1069547520))
+        }
+        public mutating func `setF32`(_ value: Float) {
+            _capnpBuilder.setData(value, at: 8, default: Float(bitPattern: 1069547520))
+        }
+        public func `f64`() -> Double {
+            _capnpBuilder.data(at: 5, default: Double(bitPattern: 13835621005235585024))
+        }
+        public mutating func `setF64`(_ value: Double) {
+            _capnpBuilder.setData(value, at: 5, default: Double(bitPattern: 13835621005235585024))
+        }
+        @_lifetime(&self)
+        public mutating func `initChild`() -> Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder` {
+            return Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`(_capnpBuilder.initStruct(at: 2, dataWords: Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`._capnpDataWords, pointerCount: Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`._capnpPointerCount))
+        }
+        public mutating func `clearChild`() {
+            _capnpBuilder.clearPointer(at: 2)
+        }
+        public mutating func `setIdle`() {
+            _capnpClearUnion()
+            _capnpBuilder.setData(UInt16(0), at: 18, default: UInt16(0))
+        }
+        public func `value`() -> UInt32 {
+            _capnpBuilder.data(at: 12, default: UInt32(77))
+        }
+        public mutating func `setValue`(_ value: UInt32) {
+            _capnpClearUnion()
+            _capnpBuilder.setData(UInt16(1), at: 18, default: UInt16(0))
+            _capnpBuilder.setData(value, at: 12, default: UInt32(77))
+        }
+        @_lifetime(&self)
+        public mutating func `initDetail`() -> Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`detailBuilder` {
+            _capnpClearUnion()
+            _capnpBuilder.setData(UInt16(2), at: 18, default: UInt16(0))
+            return Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`detailBuilder`(_capnpBuilder.reborrow())
+        }
+        @available(anyAppleOS 27, *)
+        public struct `detailBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 7 }
+            public static var _capnpPointerCount: Int { 11 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public func `amount`() -> UInt64 {
+                _capnpBuilder.data(at: 6, default: UInt64(0))
+            }
+            public mutating func `setAmount`(_ value: UInt64) {
+                _capnpBuilder.setData(value, at: 6, default: UInt64(0))
+            }
+        }
+        @available(anyAppleOS 27, *)
+        public struct `ChildBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 1 }
+            public static var _capnpPointerCount: Int { 1 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public func `id`() -> UInt64 {
+                _capnpBuilder.data(at: 0, default: UInt64(9))
+            }
+            public mutating func `setId`(_ value: UInt64) {
+                _capnpBuilder.setData(value, at: 0, default: UInt64(9))
+            }
+        }
+    }
+    @available(anyAppleOS 27, *)
     public struct `NewReader`: ~Escapable, ~Sendable, CapnpRuntime.CapnpStructReader {
         private let _capnpReader: CapnpRuntime.StructReader
         public static var _capnpTypeID: UInt64 { 10159685438558043045 }
@@ -155,6 +292,46 @@ public enum Capnp_9eb32e19f86f3a01 {
         }
     }
     @available(anyAppleOS 27, *)
+    public struct `NewBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 2 }
+        public static var _capnpPointerCount: Int { 2 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        public func `value`() -> UInt16 {
+            _capnpBuilder.data(at: 0, default: UInt16(0))
+        }
+        public mutating func `setValue`(_ value: UInt16) {
+            _capnpBuilder.setData(value, at: 0, default: UInt16(0))
+        }
+        public func `added`() -> UInt64 {
+            _capnpBuilder.data(at: 1, default: UInt64(123))
+        }
+        public mutating func `setAdded`(_ value: UInt64) {
+            _capnpBuilder.setData(value, at: 1, default: UInt64(123))
+        }
+        @available(anyAppleOS 27, *)
+        public struct `ItemBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 2 }
+            public static var _capnpPointerCount: Int { 0 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public func `value`() -> UInt16 {
+                _capnpBuilder.data(at: 0, default: UInt16(0))
+            }
+            public mutating func `setValue`(_ value: UInt16) {
+                _capnpBuilder.setData(value, at: 0, default: UInt16(0))
+            }
+            public func `extra`() -> UInt64 {
+                _capnpBuilder.data(at: 1, default: UInt64(456))
+            }
+            public mutating func `setExtra`(_ value: UInt64) {
+                _capnpBuilder.setData(value, at: 1, default: UInt64(456))
+            }
+        }
+    }
+    @available(anyAppleOS 27, *)
     public struct `OldReader`: ~Escapable, ~Sendable, CapnpRuntime.CapnpStructReader {
         private let _capnpReader: CapnpRuntime.StructReader
         public static var _capnpTypeID: UInt64 { 12734568673406230060 }
@@ -165,6 +342,20 @@ public enum Capnp_9eb32e19f86f3a01 {
         }
         public var `values`: CapnpRuntime.PrimitiveList<UInt16> {
             @_lifetime(copy self) get { CapnpRuntime.PrimitiveList(_capnpReader.pointerField(at: 0).list(of: .twoBytes)) }
+        }
+    }
+    @available(anyAppleOS 27, *)
+    public struct `OldBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 1 }
+        public static var _capnpPointerCount: Int { 1 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        public func `value`() -> UInt16 {
+            _capnpBuilder.data(at: 0, default: UInt16(0))
+        }
+        public mutating func `setValue`(_ value: UInt16) {
+            _capnpBuilder.setData(value, at: 0, default: UInt16(0))
         }
     }
 }

@@ -82,6 +82,103 @@ public enum Capnp_d0c5000000000001 {
             }
         }
     }
+    /// A point in the plane.
+    ///
+    /// Second paragraph, after a blank comment line.
+    @available(anyAppleOS 27, *)
+    public struct `PointBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 2 }
+        public static var _capnpPointerCount: Int { 1 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        /// Horizontal position.
+        public func `x`() -> Int32 {
+            _capnpBuilder.data(at: 0, default: Int32(0))
+        }
+        public mutating func `setX`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 0, default: Int32(0))
+        }
+        /// Vertical position, documented on the line below.
+        public func `y`() -> Int32 {
+            _capnpBuilder.data(at: 1, default: Int32(0))
+        }
+        public mutating func `setY`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 1, default: Int32(0))
+        }
+        /// Which shape the point marks.
+        @_lifetime(&self)
+        public mutating func `shape`() -> Capnp_d0c5000000000001.`PointBuilder`.`shapeBuilder` {
+            return Capnp_d0c5000000000001.`PointBuilder`.`shapeBuilder`(_capnpBuilder.reborrow())
+        }
+        /// Drawing style.
+        @_lifetime(&self)
+        public mutating func `style`() -> Capnp_d0c5000000000001.`PointBuilder`.`styleBuilder` {
+            return Capnp_d0c5000000000001.`PointBuilder`.`styleBuilder`(_capnpBuilder.reborrow())
+        }
+        /// Drawing style.
+        @available(anyAppleOS 27, *)
+        public struct `styleBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 2 }
+            public static var _capnpPointerCount: Int { 1 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            /// Draw heavier.
+            public func `bold`() -> Bool {
+                _capnpBuilder.data(at: 80, default: false)
+            }
+            public mutating func `setBold`(_ value: Bool) {
+                _capnpBuilder.setData(value, at: 80, default: false)
+            }
+        }
+        /// Which shape the point marks.
+        @available(anyAppleOS 27, *)
+        public struct `shapeBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 2 }
+            public static var _capnpPointerCount: Int { 1 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            /// Active union tag, or nil for a tag unknown to this schema version.
+            public func _capnpWhich() -> Capnp_d0c5000000000001.`PointReader`.`shapeReader`._CapnpWhich? {
+                .init(rawValue: _capnpBuilder.data(at: 4, default: UInt16(0)))
+            }
+            // Zero every union member's storage before another member is set.
+            private mutating func _capnpClearUnion() {
+                _capnpBuilder.setData(Float(0), at: 3, default: Float(0))
+            }
+            /// A bare dot.
+            public mutating func `setDot`() {
+                _capnpClearUnion()
+                _capnpBuilder.setData(UInt16(0), at: 4, default: UInt16(0))
+            }
+            /// A circle of this radius.
+            public func `circle`() -> Float {
+                _capnpBuilder.data(at: 3, default: Float(bitPattern: 0))
+            }
+            public mutating func `setCircle`(_ value: Float) {
+                _capnpClearUnion()
+                _capnpBuilder.setData(UInt16(1), at: 4, default: UInt16(0))
+                _capnpBuilder.setData(value, at: 3, default: Float(bitPattern: 0))
+            }
+        }
+        /// A nested declaration.
+        @available(anyAppleOS 27, *)
+        public struct `NestedBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 1 }
+            public static var _capnpPointerCount: Int { 0 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public func `n`() -> UInt8 {
+                _capnpBuilder.data(at: 0, default: UInt8(0))
+            }
+            public mutating func `setN`(_ value: UInt8) {
+                _capnpBuilder.setData(value, at: 0, default: UInt8(0))
+            }
+        }
+    }
     @available(anyAppleOS 27, *)
     public struct `PlainReader`: ~Escapable, ~Sendable, CapnpRuntime.CapnpStructReader {
         private let _capnpReader: CapnpRuntime.StructReader
@@ -90,6 +187,20 @@ public enum Capnp_d0c5000000000001 {
         public init(_ reader: consuming CapnpRuntime.StructReader) { _capnpReader = reader }
         public var `value`: UInt16 {
             _capnpReader.data(at: 0, default: UInt16(0))
+        }
+    }
+    @available(anyAppleOS 27, *)
+    public struct `PlainBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 1 }
+        public static var _capnpPointerCount: Int { 0 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        public func `value`() -> UInt16 {
+            _capnpBuilder.data(at: 0, default: UInt16(0))
+        }
+        public mutating func `setValue`(_ value: UInt16) {
+            _capnpBuilder.setData(value, at: 0, default: UInt16(0))
         }
     }
 }

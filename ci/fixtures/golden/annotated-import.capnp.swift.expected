@@ -15,4 +15,18 @@ public enum Capnp_a11071a7ed000001 {
             _capnpReader.data(at: 0, default: UInt64(0))
         }
     }
+    @available(anyAppleOS 27, *)
+    public struct `ThingBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 1 }
+        public static var _capnpPointerCount: Int { 0 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        public func `id`() -> UInt64 {
+            _capnpBuilder.data(at: 0, default: UInt64(0))
+        }
+        public mutating func `setId`(_ value: UInt64) {
+            _capnpBuilder.setData(value, at: 0, default: UInt64(0))
+        }
+    }
 }

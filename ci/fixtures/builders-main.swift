@@ -16,7 +16,9 @@ import Foundation
 
 typealias B = Capnp_b0b1d0e2c3a4f501
 
-func build(_ mode: Int, into message: inout CapnpRuntime.MessageBuilder) {
+/// `check` is false for the deliberately too-small first pass: after `.outOfSpace` views
+/// have no storage and read back defaults, so read-back checks only run on the real build.
+func build(_ mode: Int, into message: inout CapnpRuntime.MessageBuilder, check: Bool) {
     var root = message.initRoot(B.RootBuilder.self)
     switch mode {
     case 0:
@@ -51,8 +53,10 @@ func build(_ mode: Int, into message: inout CapnpRuntime.MessageBuilder) {
             var extra = root.extra()
             extra.setB(77)
         }
-        precondition(root.flag() == false && root.i32() == 0 && root.level() == .high)
-        precondition(root._capnpWhich() == .count)
+        if check {
+            precondition(root.flag() == false && root.i32() == 0 && root.level() == .high)
+            precondition(root._capnpWhich() == .count)
+        }
     case 2:
         do {
             var pick = root.initPick()
@@ -169,7 +173,7 @@ struct BuildersMain {
                 var small = [UInt8](repeating: 0, count: 24)
                 var span = small.mutableSpan
                 var message = CapnpRuntime.MessageBuilder(storage: span.mutableBytes)
-                build(mode, into: &message)
+                build(mode, into: &message, check: false)
                 precondition(message.error == .outOfSpace, "mode \(mode): expected outOfSpace")
                 required = message.requiredByteCount
             }
@@ -178,7 +182,7 @@ struct BuildersMain {
             do {
                 var span = storage.mutableSpan
                 var message = CapnpRuntime.MessageBuilder(storage: span.mutableBytes)
-                build(mode, into: &message)
+                build(mode, into: &message, check: true)
                 precondition(message.error == .none, "mode \(mode): \(message.error)")
                 let bytes = message.framedBytes
                 precondition(bytes.byteCount == required, "mode \(mode): retry size differs")

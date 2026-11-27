@@ -69,6 +69,49 @@ public enum Capnp_c0c5000000000001 {
             public static var `depth`: UInt8 { UInt8(3) }
         }
     }
+    /// Constants nested in a struct with fields and a union.
+    @available(anyAppleOS 27, *)
+    public struct `LimitsBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 1 }
+        public static var _capnpPointerCount: Int { 0 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        /// Active union tag, or nil for a tag unknown to this schema version.
+        public func _capnpWhich() -> Capnp_c0c5000000000001.`LimitsReader`._CapnpWhich? {
+            .init(rawValue: _capnpBuilder.data(at: 1, default: UInt16(0)))
+        }
+        // Zero every union member's storage before another member is set.
+        private mutating func _capnpClearUnion() {
+            _capnpBuilder.setData(UInt8(0), at: 4, default: UInt8(0))
+        }
+        public func `value`() -> Int16 {
+            _capnpBuilder.data(at: 0, default: Int16(0))
+        }
+        public mutating func `setValue`(_ value: Int16) {
+            _capnpBuilder.setData(value, at: 0, default: Int16(0))
+        }
+        public mutating func `setNone`() {
+            _capnpClearUnion()
+            _capnpBuilder.setData(UInt16(0), at: 1, default: UInt16(0))
+        }
+        public func `count`() -> UInt8 {
+            _capnpBuilder.data(at: 4, default: UInt8(0))
+        }
+        public mutating func `setCount`(_ value: UInt8) {
+            _capnpClearUnion()
+            _capnpBuilder.setData(UInt16(1), at: 1, default: UInt16(0))
+            _capnpBuilder.setData(value, at: 4, default: UInt8(0))
+        }
+        @available(anyAppleOS 27, *)
+        public struct `InnerBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 0 }
+            public static var _capnpPointerCount: Int { 0 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        }
+    }
     @available(anyAppleOS 27, *)
     public struct `OracleReader`: ~Escapable, ~Sendable, CapnpRuntime.CapnpStructReader {
         private let _capnpReader: CapnpRuntime.StructReader
@@ -128,6 +171,122 @@ public enum Capnp_c0c5000000000001 {
         }
         public var `depth`: UInt8 {
             _capnpReader.data(at: 27, default: UInt8(0))
+        }
+    }
+    @available(anyAppleOS 27, *)
+    public struct `OracleBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 9 }
+        public static var _capnpPointerCount: Int { 0 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        public func `answer`() -> Int32 {
+            _capnpBuilder.data(at: 0, default: Int32(0))
+        }
+        public mutating func `setAnswer`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 0, default: Int32(0))
+        }
+        public func `minInt64`() -> Int64 {
+            _capnpBuilder.data(at: 1, default: Int64(0))
+        }
+        public mutating func `setMinInt64`(_ value: Int64) {
+            _capnpBuilder.setData(value, at: 1, default: Int64(0))
+        }
+        public func `maxUInt64`() -> UInt64 {
+            _capnpBuilder.data(at: 2, default: UInt64(0))
+        }
+        public mutating func `setMaxUInt64`(_ value: UInt64) {
+            _capnpBuilder.setData(value, at: 2, default: UInt64(0))
+        }
+        public func `minInt8`() -> Int8 {
+            _capnpBuilder.data(at: 4, default: Int8(0))
+        }
+        public mutating func `setMinInt8`(_ value: Int8) {
+            _capnpBuilder.setData(value, at: 4, default: Int8(0))
+        }
+        public func `minInt16`() -> Int16 {
+            _capnpBuilder.data(at: 3, default: Int16(0))
+        }
+        public mutating func `setMinInt16`(_ value: Int16) {
+            _capnpBuilder.setData(value, at: 3, default: Int16(0))
+        }
+        public func `maxUInt8`() -> UInt8 {
+            _capnpBuilder.data(at: 5, default: UInt8(0))
+        }
+        public mutating func `setMaxUInt8`(_ value: UInt8) {
+            _capnpBuilder.setData(value, at: 5, default: UInt8(0))
+        }
+        public func `maxUInt16`() -> UInt16 {
+            _capnpBuilder.data(at: 12, default: UInt16(0))
+        }
+        public mutating func `setMaxUInt16`(_ value: UInt16) {
+            _capnpBuilder.setData(value, at: 12, default: UInt16(0))
+        }
+        public func `maxUInt32`() -> UInt32 {
+            _capnpBuilder.data(at: 7, default: UInt32(0))
+        }
+        public mutating func `setMaxUInt32`(_ value: UInt32) {
+            _capnpBuilder.setData(value, at: 7, default: UInt32(0))
+        }
+        public func `yes`() -> Bool {
+            _capnpBuilder.data(at: 208, default: false)
+        }
+        public mutating func `setYes`(_ value: Bool) {
+            _capnpBuilder.setData(value, at: 208, default: false)
+        }
+        public func `no`() -> Bool {
+            _capnpBuilder.data(at: 209, default: false)
+        }
+        public mutating func `setNo`(_ value: Bool) {
+            _capnpBuilder.setData(value, at: 209, default: false)
+        }
+        public func `notANumber`() -> Float {
+            _capnpBuilder.data(at: 8, default: Float(bitPattern: 0))
+        }
+        public mutating func `setNotANumber`(_ value: Float) {
+            _capnpBuilder.setData(value, at: 8, default: Float(bitPattern: 0))
+        }
+        public func `negativeInfinity`() -> Double {
+            _capnpBuilder.data(at: 5, default: Double(bitPattern: 0))
+        }
+        public mutating func `setNegativeInfinity`(_ value: Double) {
+            _capnpBuilder.setData(value, at: 5, default: Double(bitPattern: 0))
+        }
+        public func `negativeZero`() -> Double {
+            _capnpBuilder.data(at: 6, default: Double(bitPattern: 0))
+        }
+        public mutating func `setNegativeZero`(_ value: Double) {
+            _capnpBuilder.setData(value, at: 6, default: Double(bitPattern: 0))
+        }
+        public func `subnormal`() -> Float {
+            _capnpBuilder.data(at: 9, default: Float(bitPattern: 0))
+        }
+        public mutating func `setSubnormal`(_ value: Float) {
+            _capnpBuilder.setData(value, at: 9, default: Float(bitPattern: 0))
+        }
+        public func `large`() -> Float {
+            _capnpBuilder.data(at: 14, default: Float(bitPattern: 0))
+        }
+        public mutating func `setLarge`(_ value: Float) {
+            _capnpBuilder.setData(value, at: 14, default: Float(bitPattern: 0))
+        }
+        public func `third`() -> Double {
+            _capnpBuilder.data(at: 8, default: Double(bitPattern: 0))
+        }
+        public mutating func `setThird`(_ value: Double) {
+            _capnpBuilder.setData(value, at: 8, default: Double(bitPattern: 0))
+        }
+        public func `floor`() -> Int16 {
+            _capnpBuilder.data(at: 30, default: Int16(0))
+        }
+        public mutating func `setFloor`(_ value: Int16) {
+            _capnpBuilder.setData(value, at: 30, default: Int16(0))
+        }
+        public func `depth`() -> UInt8 {
+            _capnpBuilder.data(at: 27, default: UInt8(0))
+        }
+        public mutating func `setDepth`(_ value: UInt8) {
+            _capnpBuilder.setData(value, at: 27, default: UInt8(0))
         }
     }
 }

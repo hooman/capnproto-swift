@@ -653,6 +653,10 @@ print(f'PASS: constants (golden, C++ oracle bit-exact, {len(const_rejects)} diag
 builders = work / 'builders'
 builders.mkdir()
 run([capnp, 'compile', '-o', f'{plugin}:{builders}', f'--src-prefix={fixture}', fixture / 'builders.capnp'])
+# The golden was recorded from the generator's output after review (not written beforehand);
+# the readers in it are unchanged, and every other golden only gained builder blocks.
+assert (builders / 'builders.capnp.swift').read_bytes() == \
+    (fixture / 'golden/builders.capnp.swift.expected').read_bytes(), 'golden output changed: builders'
 builder_messages = {
     0: b'()',
     1: b'(flag = false, i8 = 100, i16 = -2, i32 = 0, i64 = -9000000000, u8 = 255, u16 = 0, '
