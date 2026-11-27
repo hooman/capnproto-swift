@@ -133,7 +133,11 @@ struct ExamplesMain {
             do {
                 var span = storage.mutableSpan
                 var message = CapnpRuntime.MessageBuilder(storage: span.mutableBytes)
-                if mode == 2 { buildOld(into: &message) } else { buildExample(mode, into: &message) }
+                if mode == 2 {
+                    buildOld(into: &message)
+                } else {
+                    buildExample(mode, into: &message)
+                }
                 precondition(message.error == .none, "mode \(mode): \(message.error)")
                 let bytes = message.framedBytes
                 for i in 0..<bytes.byteCount {

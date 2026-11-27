@@ -418,8 +418,9 @@ struct SwiftGenerator {
     // methods (`foo()`, `setFoo(_:)`, `initFoo()`, `clearFoo()`), because on Swift 6.4.2 a
     // public get/set property on a noncopyable view emits an allocating `modify` coroutine.
     // Setting any union member first zeroes every member's storage, then writes the
-    // discriminant, so no inactive member's bits or subtree survive. Text, data and list
-    // fields get no builder methods until build item 3.
+    // discriminant, so no inactive member's bits or subtree survive. Text takes a
+    // `UTF8Span` (so only valid UTF-8 is written), data a `Span<UInt8>`, and a list field
+    // `initFoo(count:)` returns a typed runtime list builder.
 
     /// The type names a declaration generates in its scope: a struct has a reader and a builder.
     private func generatedTypeNames(_ node: SchemaNode) throws -> [String] {
@@ -541,8 +542,39 @@ struct SwiftGenerator {
                         "        _capnpBuilder.clearPointer(at: \(field.offset))",
                         "    }",
                     ]
-            default:
-                continue  // text, data and lists: build item 3
+            case .text, .data:
+                let isText: Bool
+                if case .text = field.type { isText = true } else { isText = false }
+                let (input, call) = isText ? ("UTF8Span", "setText") : ("Span<UInt8>", "setBytes")
+                lines +=
+                    doc + [
+                        "    public mutating func \(try member("set" + upper))(_ value: \(input)) {"
+                    ]
+                lines +=
+                    prelude + [
+                        "        _capnpBuilder.\(call)(value, at: \(field.offset))",
+                        "    }",
+                        "    public mutating func \(try member("clear" + upper))() {",
+                        "        _capnpBuilder.clearPointer(at: \(field.offset))",
+                        "    }",
+                    ]
+            case .list(let element):
+                let type = try builderListType(element)
+                lines +=
+                    doc + [
+                        "    @_lifetime(&self)",
+                        "    public mutating func \(try member("init" + upper))(count: Int) -> \(type) {",
+                    ]
+                lines +=
+                    prelude + [
+                        "        return _capnpBuilder.initList(\(type).self, at: \(field.offset), count: count)",
+                        "    }",
+                        "    public mutating func \(try member("clear" + upper))() {",
+                        "        _capnpBuilder.clearPointer(at: \(field.offset))",
+                        "    }",
+                    ]
+            case .unsupported(let kind):
+                throw CompilerFailure("unsupported field type \(kind)")
             }
         }
         for child in children(of: node.id) where child.kind == 1 {
@@ -550,6 +582,21 @@ struct SwiftGenerator {
         }
         lines.append("}")
         return lines
+    }
+
+    /// The runtime list builder for a list of `element`.
+    private func builderListType(_ element: FieldType) throws -> String {
+        switch element {
+        case .scalar(.void): return "CapnpRuntime.VoidListBuilder"
+        case .scalar(let scalar): return "CapnpRuntime.PrimitiveListBuilder<\(scalar.swift)>"
+        case .enumeration: return "CapnpRuntime.EnumListBuilder<\(try swiftType(element))>"
+        case .text: return "CapnpRuntime.TextListBuilder"
+        case .data: return "CapnpRuntime.DataListBuilder"
+        case .structure(let id):
+            return "CapnpRuntime.StructListBuilder<\(try qualifiedBuilderName(id))>"
+        case .list(let inner): return "CapnpRuntime.ListListBuilder<\(try builderListType(inner))>"
+        case .unsupported(let kind): throw CompilerFailure("unsupported field type \(kind)")
+        }
     }
 
     /// Statements that zero one union member's storage: data bits, pointers (with their

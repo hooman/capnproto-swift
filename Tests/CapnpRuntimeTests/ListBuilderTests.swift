@@ -46,7 +46,9 @@ private func build(
         error = message.error
         required = message.requiredByteCount
         let bytes = message.framedBytes
-        for i in 0..<bytes.byteCount { framed.append(bytes.load(fromByteOffset: i, as: UInt8.self)) }
+        for i in 0..<bytes.byteCount {
+            framed.append(bytes.load(fromByteOffset: i, as: UInt8.self))
+        }
     }
     return (framed, error, required, buffer)
 }
@@ -297,7 +299,8 @@ struct ListBuilderTests {
             let arena = Arena(framedBytes: message.framedBytes)
             ok = arena.withRoot { root in
                 let text = root.pointerField(at: 0).text()
-                let numbers = PrimitiveList(root.pointerField(at: 1).list(of: .fourBytes), zero: UInt32(0))
+                let numbers = PrimitiveList(
+                    root.pointerField(at: 1).list(of: .fourBytes), zero: UInt32(0))
                 let texts = root.pointerField(at: 2).list(of: .pointer)
                 return text.utf8.count == 3 && numbers.count == 2 && numbers[1] == 7
                     && texts.count == 1

@@ -131,6 +131,20 @@ public enum Capnp_e0e5000000000001 {
         public mutating func `setAccent`(_ value: Capnp_e0e5000000000001.`Color`) {
             _capnpBuilder.setData(value.rawValue, at: 1, default: UInt16(2))
         }
+        @_lifetime(&self)
+        public mutating func `initColors`(count: Int) -> CapnpRuntime.EnumListBuilder<Capnp_e0e5000000000001.`Color`> {
+            return _capnpBuilder.initList(CapnpRuntime.EnumListBuilder<Capnp_e0e5000000000001.`Color`>.self, at: 0, count: count)
+        }
+        public mutating func `clearColors`() {
+            _capnpBuilder.clearPointer(at: 0)
+        }
+        @_lifetime(&self)
+        public mutating func `initGrid`(count: Int) -> CapnpRuntime.ListListBuilder<CapnpRuntime.EnumListBuilder<Capnp_e0e5000000000001.`Color`>> {
+            return _capnpBuilder.initList(CapnpRuntime.ListListBuilder<CapnpRuntime.EnumListBuilder<Capnp_e0e5000000000001.`Color`>>.self, at: 1, count: count)
+        }
+        public mutating func `clearGrid`() {
+            _capnpBuilder.clearPointer(at: 1)
+        }
         public func `level`() -> Capnp_e0e5000000000002.`Level`? {
             Capnp_e0e5000000000002.`Level`(rawValue: _capnpBuilder.data(at: 2, default: UInt16(0)))
         }

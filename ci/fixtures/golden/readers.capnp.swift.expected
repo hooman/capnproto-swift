@@ -205,12 +205,73 @@ public enum Capnp_9eb32e19f86f3a01 {
         public mutating func `setF64`(_ value: Double) {
             _capnpBuilder.setData(value, at: 5, default: Double(bitPattern: 13835621005235585024))
         }
+        public mutating func `setText`(_ value: UTF8Span) {
+            _capnpBuilder.setText(value, at: 0)
+        }
+        public mutating func `clearText`() {
+            _capnpBuilder.clearPointer(at: 0)
+        }
+        public mutating func `setData`(_ value: Span<UInt8>) {
+            _capnpBuilder.setBytes(value, at: 1)
+        }
+        public mutating func `clearData`() {
+            _capnpBuilder.clearPointer(at: 1)
+        }
         @_lifetime(&self)
         public mutating func `initChild`() -> Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder` {
             return Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`(_capnpBuilder.initStruct(at: 2, dataWords: Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`._capnpDataWords, pointerCount: Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`._capnpPointerCount))
         }
         public mutating func `clearChild`() {
             _capnpBuilder.clearPointer(at: 2)
+        }
+        @_lifetime(&self)
+        public mutating func `initChildren`(count: Int) -> CapnpRuntime.StructListBuilder<Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`> {
+            return _capnpBuilder.initList(CapnpRuntime.StructListBuilder<Capnp_9eb32e19f86f3a01.`ExampleBuilder`.`ChildBuilder`>.self, at: 3, count: count)
+        }
+        public mutating func `clearChildren`() {
+            _capnpBuilder.clearPointer(at: 3)
+        }
+        @_lifetime(&self)
+        public mutating func `initBits`(count: Int) -> CapnpRuntime.PrimitiveListBuilder<Bool> {
+            return _capnpBuilder.initList(CapnpRuntime.PrimitiveListBuilder<Bool>.self, at: 4, count: count)
+        }
+        public mutating func `clearBits`() {
+            _capnpBuilder.clearPointer(at: 4)
+        }
+        @_lifetime(&self)
+        public mutating func `initNumbers`(count: Int) -> CapnpRuntime.PrimitiveListBuilder<UInt32> {
+            return _capnpBuilder.initList(CapnpRuntime.PrimitiveListBuilder<UInt32>.self, at: 5, count: count)
+        }
+        public mutating func `clearNumbers`() {
+            _capnpBuilder.clearPointer(at: 5)
+        }
+        @_lifetime(&self)
+        public mutating func `initTexts`(count: Int) -> CapnpRuntime.TextListBuilder {
+            return _capnpBuilder.initList(CapnpRuntime.TextListBuilder.self, at: 6, count: count)
+        }
+        public mutating func `clearTexts`() {
+            _capnpBuilder.clearPointer(at: 6)
+        }
+        @_lifetime(&self)
+        public mutating func `initBlobs`(count: Int) -> CapnpRuntime.DataListBuilder {
+            return _capnpBuilder.initList(CapnpRuntime.DataListBuilder.self, at: 7, count: count)
+        }
+        public mutating func `clearBlobs`() {
+            _capnpBuilder.clearPointer(at: 7)
+        }
+        @_lifetime(&self)
+        public mutating func `initMatrix`(count: Int) -> CapnpRuntime.ListListBuilder<CapnpRuntime.PrimitiveListBuilder<UInt16>> {
+            return _capnpBuilder.initList(CapnpRuntime.ListListBuilder<CapnpRuntime.PrimitiveListBuilder<UInt16>>.self, at: 8, count: count)
+        }
+        public mutating func `clearMatrix`() {
+            _capnpBuilder.clearPointer(at: 8)
+        }
+        @_lifetime(&self)
+        public mutating func `initVoids`(count: Int) -> CapnpRuntime.VoidListBuilder {
+            return _capnpBuilder.initList(CapnpRuntime.VoidListBuilder.self, at: 9, count: count)
+        }
+        public mutating func `clearVoids`() {
+            _capnpBuilder.clearPointer(at: 9)
         }
         public mutating func `setIdle`() {
             _capnpClearUnion()
@@ -237,6 +298,12 @@ public enum Capnp_9eb32e19f86f3a01 {
             public static var _capnpPointerCount: Int { 11 }
             @_lifetime(copy builder)
             public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public mutating func `setLabel`(_ value: UTF8Span) {
+                _capnpBuilder.setText(value, at: 10)
+            }
+            public mutating func `clearLabel`() {
+                _capnpBuilder.clearPointer(at: 10)
+            }
             public func `amount`() -> UInt64 {
                 _capnpBuilder.data(at: 6, default: UInt64(0))
             }
@@ -256,6 +323,12 @@ public enum Capnp_9eb32e19f86f3a01 {
             }
             public mutating func `setId`(_ value: UInt64) {
                 _capnpBuilder.setData(value, at: 0, default: UInt64(9))
+            }
+            public mutating func `setName`(_ value: UTF8Span) {
+                _capnpBuilder.setText(value, at: 0)
+            }
+            public mutating func `clearName`() {
+                _capnpBuilder.clearPointer(at: 0)
             }
         }
     }
@@ -304,11 +377,24 @@ public enum Capnp_9eb32e19f86f3a01 {
         public mutating func `setValue`(_ value: UInt16) {
             _capnpBuilder.setData(value, at: 0, default: UInt16(0))
         }
+        @_lifetime(&self)
+        public mutating func `initValues`(count: Int) -> CapnpRuntime.StructListBuilder<Capnp_9eb32e19f86f3a01.`NewBuilder`.`ItemBuilder`> {
+            return _capnpBuilder.initList(CapnpRuntime.StructListBuilder<Capnp_9eb32e19f86f3a01.`NewBuilder`.`ItemBuilder`>.self, at: 0, count: count)
+        }
+        public mutating func `clearValues`() {
+            _capnpBuilder.clearPointer(at: 0)
+        }
         public func `added`() -> UInt64 {
             _capnpBuilder.data(at: 1, default: UInt64(123))
         }
         public mutating func `setAdded`(_ value: UInt64) {
             _capnpBuilder.setData(value, at: 1, default: UInt64(123))
+        }
+        public mutating func `setText`(_ value: UTF8Span) {
+            _capnpBuilder.setText(value, at: 1)
+        }
+        public mutating func `clearText`() {
+            _capnpBuilder.clearPointer(at: 1)
         }
         @available(anyAppleOS 27, *)
         public struct `ItemBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
@@ -356,6 +442,13 @@ public enum Capnp_9eb32e19f86f3a01 {
         }
         public mutating func `setValue`(_ value: UInt16) {
             _capnpBuilder.setData(value, at: 0, default: UInt16(0))
+        }
+        @_lifetime(&self)
+        public mutating func `initValues`(count: Int) -> CapnpRuntime.PrimitiveListBuilder<UInt16> {
+            return _capnpBuilder.initList(CapnpRuntime.PrimitiveListBuilder<UInt16>.self, at: 0, count: count)
+        }
+        public mutating func `clearValues`() {
+            _capnpBuilder.clearPointer(at: 0)
         }
     }
 }
