@@ -38,4 +38,56 @@ public enum Capnp_d0c5000000000002 {
             _capnpReader.data(at: 5, default: Int32(0))
         }
     }
+    /// CRLF line one.
+    /// CRLF line two.
+    @available(anyAppleOS 27, *)
+    public struct `HostileBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 3 }
+        public static var _capnpPointerCount: Int { 0 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        /// cr:
+        /// public var injected: Int { 0 }
+        public func `a`() -> Int32 {
+            _capnpBuilder.data(at: 0, default: Int32(0))
+        }
+        public mutating func `setA`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 0, default: Int32(0))
+        }
+        /// bidi:evilx ctl: tab:	end
+        public func `b`() -> Int32 {
+            _capnpBuilder.data(at: 1, default: Int32(0))
+        }
+        public mutating func `setB`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 1, default: Int32(0))
+        }
+        /// bad utf8:��!
+        public func `c`() -> Int32 {
+            _capnpBuilder.data(at: 2, default: Int32(0))
+        }
+        public mutating func `setC`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 2, default: Int32(0))
+        }
+        /// */ /* and } code();
+        public func `d`() -> Int32 {
+            _capnpBuilder.data(at: 3, default: Int32(0))
+        }
+        public mutating func `setD`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 3, default: Int32(0))
+        }
+        public func `e`() -> Int32 {
+            _capnpBuilder.data(at: 4, default: Int32(0))
+        }
+        public mutating func `setE`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 4, default: Int32(0))
+        }
+        /// [31mansi
+        public func `f`() -> Int32 {
+            _capnpBuilder.data(at: 5, default: Int32(0))
+        }
+        public mutating func `setF`(_ value: Int32) {
+            _capnpBuilder.setData(value, at: 5, default: Int32(0))
+        }
+    }
 }

@@ -65,4 +65,89 @@ public enum Capnp_a11071a7ed000002 {
             }
         }
     }
+    @available(anyAppleOS 27, *)
+    public struct `BoxBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 2 }
+        public static var _capnpPointerCount: Int { 1 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        public func `value`() -> UInt32 {
+            _capnpBuilder.data(at: 0, default: UInt32(5))
+        }
+        public mutating func `setValue`(_ value: UInt32) {
+            _capnpBuilder.setData(value, at: 0, default: UInt32(5))
+        }
+        @_lifetime(&self)
+        public mutating func `initThing`() -> Capnp_a11071a7ed000001.`ThingBuilder` {
+            return Capnp_a11071a7ed000001.`ThingBuilder`(_capnpBuilder.initStruct(at: 0, dataWords: Capnp_a11071a7ed000001.`ThingBuilder`._capnpDataWords, pointerCount: Capnp_a11071a7ed000001.`ThingBuilder`._capnpPointerCount))
+        }
+        public mutating func `clearThing`() {
+            _capnpBuilder.clearPointer(at: 0)
+        }
+        @_lifetime(&self)
+        public mutating func `choice`() -> Capnp_a11071a7ed000002.`BoxBuilder`.`choiceBuilder` {
+            return Capnp_a11071a7ed000002.`BoxBuilder`.`choiceBuilder`(_capnpBuilder.reborrow())
+        }
+        @_lifetime(&self)
+        public mutating func `extra`() -> Capnp_a11071a7ed000002.`BoxBuilder`.`extraBuilder` {
+            return Capnp_a11071a7ed000002.`BoxBuilder`.`extraBuilder`(_capnpBuilder.reborrow())
+        }
+        @available(anyAppleOS 27, *)
+        public struct `NestedBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 1 }
+            public static var _capnpPointerCount: Int { 0 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public func `x`() -> Int8 {
+                _capnpBuilder.data(at: 0, default: Int8(0))
+            }
+            public mutating func `setX`(_ value: Int8) {
+                _capnpBuilder.setData(value, at: 0, default: Int8(0))
+            }
+        }
+        @available(anyAppleOS 27, *)
+        public struct `choiceBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 2 }
+            public static var _capnpPointerCount: Int { 1 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            /// Active union tag, or nil for a tag unknown to this schema version.
+            public func _capnpWhich() -> Capnp_a11071a7ed000002.`BoxReader`.`choiceReader`._CapnpWhich? {
+                .init(rawValue: _capnpBuilder.data(at: 2, default: UInt16(0)))
+            }
+            // Zero every union member's storage before another member is set.
+            private mutating func _capnpClearUnion() {
+                _capnpBuilder.setData(UInt16(0), at: 3, default: UInt16(0))
+            }
+            public mutating func `setIdle`() {
+                _capnpClearUnion()
+                _capnpBuilder.setData(UInt16(0), at: 2, default: UInt16(0))
+            }
+            public func `count`() -> UInt16 {
+                _capnpBuilder.data(at: 3, default: UInt16(0))
+            }
+            public mutating func `setCount`(_ value: UInt16) {
+                _capnpClearUnion()
+                _capnpBuilder.setData(UInt16(1), at: 2, default: UInt16(0))
+                _capnpBuilder.setData(value, at: 3, default: UInt16(0))
+            }
+        }
+        @available(anyAppleOS 27, *)
+        public struct `extraBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 2 }
+            public static var _capnpPointerCount: Int { 1 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public func `flag`() -> Bool {
+                _capnpBuilder.data(at: 64, default: false)
+            }
+            public mutating func `setFlag`(_ value: Bool) {
+                _capnpBuilder.setData(value, at: 64, default: false)
+            }
+        }
+    }
 }

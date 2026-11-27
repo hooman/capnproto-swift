@@ -92,7 +92,7 @@ def build(name, target):
     run([*swift, '-strict-memory-safety', '-parse-as-library', '-emit-module', '-module-name', 'CapnpRuntime',
          '-emit-module-path', out / 'CapnpRuntime.swiftmodule', *sources, '-c', '-o', out / 'runtime.o'])
     run([*swift, '-I', out, '-module-name', 'image', '-c', readers / 'readers.capnp.swift',
-         root / 'ci/fixtures/verify.swift', root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/build32.swift',
+         root / 'ci/fixtures/verify.swift', root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/build32.swift', root / 'ci/fixtures/genbuild32.swift',
          root / 'ci/qemu/main.swift',
          '-o', out / 'image.o'])
     run([tool['clang'], '-target', target['triple'], *target['clang'], '-ffreestanding', '-fno-builtin', '-Os',
@@ -163,6 +163,7 @@ for name in args.target or list(TARGETS):
     passes(99, r'^PASS mode=99 checks=8$')
     passes(98, r'^PASS mode=98 checks=5$')
     passes(97, r'^PASS mode=97 checks=7$')
+    passes(96, r'^PASS mode=96 checks=2$')
 
     # Negative controls: each must trap into the fault handler and exit non-zero.
     corrupted = bytearray(populated.read_bytes())
@@ -174,6 +175,6 @@ for name in args.target or list(TARGETS):
         assert status != 0 and 'FAULT' in output and 'PASS' not in output, \
             f'{name}: negative control "{label}" did not fail: exit {status}: {output!r}'
     print(f'PASS qemu {name} ({" ".join(target["qemu"][:3])}): {len(messages)} aligned + 2 unaligned '
-          f'oracle messages, {len(messages)} packed, 8 32-bit edge checks, 5 packed and 7 builder; '
+          f'oracle messages, {len(messages)} packed, 8 32-bit edge checks, 5 packed, 7 builder and 2 generated-builder; '
           f'2 negative controls fault; flash={flash} B, max stack={stack} B', flush=True)
 print('QEMU CHECK: PASS', flush=True)

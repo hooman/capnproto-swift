@@ -64,6 +64,15 @@ private func build(
         capacity: capacity)
 }
 
+/// A hand-written conformer, standing in for a generated builder (item 2).
+private struct PairBuilder: ~Copyable, ~Escapable, CapnpStructBuilder {
+    var builder: StructBuilder
+    static var _capnpDataWords: Int { 1 }
+    static var _capnpPointerCount: Int { 0 }
+    @_lifetime(copy builder)
+    init(_ builder: consuming StructBuilder) { self.builder = builder }
+}
+
 @Suite("Builder answer key")
 struct BuilderTests {
     @Test func singleScalarRoot() {
@@ -328,6 +337,17 @@ struct BuilderTests {
             chain(&root, 64)
         }
         #expect(tooDeep.error == .nestingLimit)
+    }
+
+    @Test func genericInitRootAndReborrow() {
+        let built = build { message in
+            var pair = message.initRoot(PairBuilder.self)
+            pair.builder.setData(UInt32(1), at: 0, default: 0)
+            var group = pair.builder.reborrow()  // a group view of the same struct
+            group.setData(UInt32(2), at: 1, default: 0)
+        }
+        #expect(built.error == .none)
+        #expect(built.framed == frame([0x0000_0001_0000_0000, 0x0000_0002_0000_0001]))
     }
 
     @Test func roundTripThroughTheReader() {

@@ -18,8 +18,17 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   `StructBuilder.initStruct(at:dataWords:pointerCount:)` return exclusive views, and
   `setData(_:at:default:)`, `data(at:default:)` and `clearPointer(at:)` write and read
   fields. Errors are sticky (`BuildError`) and never trap; `requiredByteCount` is the exact
-  size to retry with after `.outOfSpace`. `framedBytes` opens directly in `Arena`. Generated
-  builders, text, data and lists are not in yet.
+  size to retry with after `.outOfSpace`. `framedBytes` opens directly in `Arena`.
+- `capnpc-swift` generates a builder beside each struct's reader (`ExampleBuilder` beside
+  `ExampleReader`) for scalars, enums, nested structs, groups and unions:
+  `message.initRoot(ExampleBuilder.self)`, then `setFoo(_:)`, `foo()`, `initFoo()` and
+  `clearFoo()`. Setting a union member zeroes the previous member's storage. Builders are
+  checked against the C++ encoder (`capnp encode`) in canonical form. Text, data and list
+  fields get builder methods in a later release. Existing generated reader code is
+  unchanged; generated files grow by the builder code, which the linker strips when unused
+  (about 80 bytes of flash remain in a reader-only Cortex-M4 image).
+- `CapnpRuntime` adds `CapnpStructBuilder` (generated-code only, like `CapnpStructReader`),
+  `MessageBuilder.initRoot(_:)` and `StructBuilder.reborrow()`.
 - `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
   closed to outside conformances.
 

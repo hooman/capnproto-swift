@@ -111,4 +111,93 @@ public enum Capnp_e0e5000000000001 {
             case `happy` = 1
         }
     }
+    @available(anyAppleOS 27, *)
+    public struct `PaletteBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+        private var _capnpBuilder: CapnpRuntime.StructBuilder
+        public static var _capnpDataWords: Int { 2 }
+        public static var _capnpPointerCount: Int { 2 }
+        @_lifetime(copy builder)
+        public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+        /// No default: red.
+        public func `primary`() -> Capnp_e0e5000000000001.`Color`? {
+            Capnp_e0e5000000000001.`Color`(rawValue: _capnpBuilder.data(at: 0, default: UInt16(0)))
+        }
+        public mutating func `setPrimary`(_ value: Capnp_e0e5000000000001.`Color`) {
+            _capnpBuilder.setData(value.rawValue, at: 0, default: UInt16(0))
+        }
+        public func `accent`() -> Capnp_e0e5000000000001.`Color`? {
+            Capnp_e0e5000000000001.`Color`(rawValue: _capnpBuilder.data(at: 1, default: UInt16(2)))
+        }
+        public mutating func `setAccent`(_ value: Capnp_e0e5000000000001.`Color`) {
+            _capnpBuilder.setData(value.rawValue, at: 1, default: UInt16(2))
+        }
+        public func `level`() -> Capnp_e0e5000000000002.`Level`? {
+            Capnp_e0e5000000000002.`Level`(rawValue: _capnpBuilder.data(at: 2, default: UInt16(0)))
+        }
+        public mutating func `setLevel`(_ value: Capnp_e0e5000000000002.`Level`) {
+            _capnpBuilder.setData(value.rawValue, at: 2, default: UInt16(0))
+        }
+        public func `mood`() -> Capnp_e0e5000000000001.`PaletteReader`.`Mood`? {
+            Capnp_e0e5000000000001.`PaletteReader`.`Mood`(rawValue: _capnpBuilder.data(at: 3, default: UInt16(0)))
+        }
+        public mutating func `setMood`(_ value: Capnp_e0e5000000000001.`PaletteReader`.`Mood`) {
+            _capnpBuilder.setData(value.rawValue, at: 3, default: UInt16(0))
+        }
+        @_lifetime(&self)
+        public mutating func `choice`() -> Capnp_e0e5000000000001.`PaletteBuilder`.`choiceBuilder` {
+            return Capnp_e0e5000000000001.`PaletteBuilder`.`choiceBuilder`(_capnpBuilder.reborrow())
+        }
+        @_lifetime(&self)
+        public mutating func `extra`() -> Capnp_e0e5000000000001.`PaletteBuilder`.`extraBuilder` {
+            return Capnp_e0e5000000000001.`PaletteBuilder`.`extraBuilder`(_capnpBuilder.reborrow())
+        }
+        public func `shuffled`() -> Capnp_e0e5000000000001.`Shuffled`? {
+            Capnp_e0e5000000000001.`Shuffled`(rawValue: _capnpBuilder.data(at: 7, default: UInt16(0)))
+        }
+        public mutating func `setShuffled`(_ value: Capnp_e0e5000000000001.`Shuffled`) {
+            _capnpBuilder.setData(value.rawValue, at: 7, default: UInt16(0))
+        }
+        @available(anyAppleOS 27, *)
+        public struct `extraBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 2 }
+            public static var _capnpPointerCount: Int { 2 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            public func `tone`() -> Capnp_e0e5000000000001.`PaletteReader`.`Mood`? {
+                Capnp_e0e5000000000001.`PaletteReader`.`Mood`(rawValue: _capnpBuilder.data(at: 6, default: UInt16(1)))
+            }
+            public mutating func `setTone`(_ value: Capnp_e0e5000000000001.`PaletteReader`.`Mood`) {
+                _capnpBuilder.setData(value.rawValue, at: 6, default: UInt16(1))
+            }
+        }
+        @available(anyAppleOS 27, *)
+        public struct `choiceBuilder`: ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {
+            private var _capnpBuilder: CapnpRuntime.StructBuilder
+            public static var _capnpDataWords: Int { 2 }
+            public static var _capnpPointerCount: Int { 2 }
+            @_lifetime(copy builder)
+            public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }
+            /// Active union tag, or nil for a tag unknown to this schema version.
+            public func _capnpWhich() -> Capnp_e0e5000000000001.`PaletteReader`.`choiceReader`._CapnpWhich? {
+                .init(rawValue: _capnpBuilder.data(at: 4, default: UInt16(0)))
+            }
+            // Zero every union member's storage before another member is set.
+            private mutating func _capnpClearUnion() {
+                _capnpBuilder.setData(UInt16(0), at: 5, default: UInt16(0))
+            }
+            public mutating func `setNone`() {
+                _capnpClearUnion()
+                _capnpBuilder.setData(UInt16(0), at: 4, default: UInt16(0))
+            }
+            public func `shade`() -> Capnp_e0e5000000000001.`Color`? {
+                Capnp_e0e5000000000001.`Color`(rawValue: _capnpBuilder.data(at: 5, default: UInt16(1)))
+            }
+            public mutating func `setShade`(_ value: Capnp_e0e5000000000001.`Color`) {
+                _capnpClearUnion()
+                _capnpBuilder.setData(UInt16(1), at: 4, default: UInt16(0))
+                _capnpBuilder.setData(value.rawValue, at: 5, default: UInt16(1))
+            }
+        }
+    }
 }

@@ -303,3 +303,39 @@ enum Builder {
         }
     }
 }
+
+// MARK: - Generated builders (D-18 item 2)
+
+/// A generated struct builder. Conformances come from `capnpc-swift`; this is not an
+/// extension point, and its requirements may change in a minor release.
+public protocol CapnpStructBuilder: ~Copyable, ~Escapable {
+    /// Data-section size of the struct, in words.
+    static var _capnpDataWords: Int { get }
+    /// Pointer-section size of the struct.
+    static var _capnpPointerCount: Int { get }
+    /// Wrap a runtime view of a struct of this layout.
+    @_lifetime(copy builder)
+    init(_ builder: consuming StructBuilder)
+}
+
+extension MessageBuilder {
+    /// Initialize the root as a generated struct builder, for example
+    /// `message.initRoot(Capnp_….PersonBuilder.self)`.
+    @_lifetime(&self)
+    public mutating func initRoot<Root: CapnpStructBuilder & ~Copyable & ~Escapable>(
+        _: Root.Type
+    ) -> Root {
+        Root(initRoot(dataWords: Root._capnpDataWords, pointerCount: Root._capnpPointerCount))
+    }
+}
+
+extension StructBuilder {
+    /// Another exclusive view of the same struct. Generated group builders use it: a group
+    /// shares its parent's layout.
+    @_lifetime(&self)
+    public mutating func reborrow() -> StructBuilder {
+        StructBuilder(
+            segment: segment._mutatingExtracting(0..<segment.byteCount),
+            state: MutableRef(&state.value), layout: layout)
+    }
+}

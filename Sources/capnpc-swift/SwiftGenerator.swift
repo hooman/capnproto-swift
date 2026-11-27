@@ -49,11 +49,15 @@ struct SwiftGenerator {
                     throw CompilerFailure(
                         "unsupported declaration kind \(node.kind) in \(file.filename)")
                 }
-                let name = try localName(node)
-                guard names.insert(name).inserted else {
-                    throw CompilerFailure("duplicate generated type name \(name)")
+                for name in try generatedTypeNames(node) {
+                    guard names.insert(name).inserted else {
+                        throw CompilerFailure("duplicate generated type name \(name)")
+                    }
                 }
                 lines += try renderChild(node, depth: 0, warnings: &warnings).map { "    " + $0 }
+                if node.kind == 1 {
+                    lines += try renderBuilder(node, depth: 0).map { "    " + $0 }
+                }
             }
             lines.append("}")
             output.append(GeneratedFile(path: path, contents: lines.joined(separator: "\n") + "\n"))
@@ -276,9 +280,10 @@ struct SwiftGenerator {
         }
         var childNames: Set<String> = []
         for child in children(of: node.id) {
-            let childName = try localName(child)
-            guard childNames.insert(childName).inserted else {
-                throw CompilerFailure("duplicate generated type name \(childName)")
+            for childName in try generatedTypeNames(child) {
+                guard childNames.insert(childName).inserted else {
+                    throw CompilerFailure("duplicate generated type name \(childName)")
+                }
             }
             lines += try renderChild(child, depth: depth + 1, warnings: &warnings).map {
                 "    " + $0
@@ -404,6 +409,177 @@ struct SwiftGenerator {
             "    }",
         ]
         return lines
+    }
+
+    // MARK: - Builders (D-18 item 2)
+    //
+    // Each struct's builder is one block after its reader, so reader output is unchanged;
+    // nested structs' and groups' builders nest inside it, as the readers do. Accessors are
+    // methods (`foo()`, `setFoo(_:)`, `initFoo()`, `clearFoo()`), because on Swift 6.4.2 a
+    // public get/set property on a noncopyable view emits an allocating `modify` coroutine.
+    // Setting any union member first zeroes every member's storage, then writes the
+    // discriminant, so no inactive member's bits or subtree survive. Text, data and list
+    // fields get no builder methods until build item 3.
+
+    /// The type names a declaration generates in its scope: a struct has a reader and a builder.
+    private func generatedTypeNames(_ node: SchemaNode) throws -> [String] {
+        node.kind == 1 ? [try localName(node), try builderName(node)] : [try localName(node)]
+    }
+
+    private func builderName(_ node: SchemaNode) throws -> String {
+        try identifier(declaredName(node) + "Builder")
+    }
+
+    private func qualifiedBuilderName(_ id: UInt64, depth: Int = 0) throws -> String {
+        guard depth < 64, let node = request.nodes[id] else {
+            throw CompilerFailure("missing or cyclic schema type \(id)")
+        }
+        if node.kind == 0 { return "Capnp_\(String(node.id, radix: 16))" }
+        guard node.kind == 1 && !node.generic else {
+            throw CompilerFailure("referenced type \(id) is not a supported nongeneric struct")
+        }
+        return try qualifiedBuilderName(node.scope, depth: depth + 1) + "." + builderName(node)
+    }
+
+    private func renderBuilder(_ node: SchemaNode, depth: Int) throws -> [String] {
+        guard depth < 64, node.kind == 1 else {
+            throw CompilerFailure("unsupported or excessively nested declaration \(node.id)")
+        }
+        let structName = try declaredName(node)
+        var members: Set<String> = []
+        func member(_ base: String) throws -> String {
+            guard members.insert(base).inserted else {
+                throw CompilerFailure("duplicate generated builder member \(base) in \(structName)")
+            }
+            return try identifier(base)
+        }
+        var lines = docLines(node.doc)
+        lines += [
+            availability,
+            "public struct \(try builderName(node)): ~Copyable, ~Escapable, ~Sendable, CapnpRuntime.CapnpStructBuilder {",
+            "    private var _capnpBuilder: CapnpRuntime.StructBuilder",
+            "    public static var _capnpDataWords: Int { \(node.dataWords) }",
+            "    public static var _capnpPointerCount: Int { \(node.pointerCount) }",
+            "    @_lifetime(copy builder)",
+            "    public init(_ builder: consuming CapnpRuntime.StructBuilder) { _capnpBuilder = builder }",
+        ]
+        if node.discriminantCount > 0 {
+            lines += [
+                "    /// Active union tag, or nil for a tag unknown to this schema version.",
+                "    public func _capnpWhich() -> \(try qualifiedName(node.id))._CapnpWhich? {",
+                "        .init(rawValue: _capnpBuilder.data(at: \(node.discriminantOffset), default: UInt16(0)))",
+                "    }",
+                "    // Zero every union member's storage before another member is set.",
+                "    private mutating func _capnpClearUnion() {",
+            ]
+            for field in node.fields where field.discriminant != UInt16.max {
+                lines += try clearLines(field, depth: 0).map { "        " + $0 }
+            }
+            lines.append("    }")
+        }
+        for field in node.fields {
+            let prelude =
+                field.discriminant == UInt16.max
+                ? []
+                : [
+                    "        _capnpClearUnion()",
+                    "        _capnpBuilder.setData(UInt16(\(field.discriminant)), at: \(node.discriminantOffset), default: UInt16(0))",
+                ]
+            let upper = field.name.prefix(1).uppercased() + field.name.dropFirst()
+            let doc = docLines(field.doc).map { "    " + $0 }
+            if let groupID = field.groupID {
+                let type = try qualifiedBuilderName(groupID)
+                let method = try member(
+                    field.discriminant == UInt16.max ? field.name : "init" + upper)
+                lines +=
+                    doc + [
+                        "    @_lifetime(&self)",
+                        "    public mutating func \(method)() -> \(type) {",
+                    ]
+                lines += prelude + ["        return \(type)(_capnpBuilder.reborrow())", "    }"]
+                continue
+            }
+            switch field.type {
+            case .scalar(.void):
+                guard field.discriminant != UInt16.max else { continue }
+                lines += doc + ["    public mutating func \(try member("set" + upper))() {"]
+                lines += prelude + ["    }"]
+            case .scalar(let scalar):
+                let at = "at: \(field.offset), default: \(field.defaultExpression)"
+                lines +=
+                    doc + [
+                        "    public func \(try member(field.name))() -> \(scalar.swift) {",
+                        "        _capnpBuilder.data(\(at))",
+                        "    }",
+                        "    public mutating func \(try member("set" + upper))(_ value: \(scalar.swift)) {",
+                    ]
+                lines += prelude + ["        _capnpBuilder.setData(value, \(at))", "    }"]
+            case .enumeration:
+                let type = try swiftType(field.type)
+                let at = "at: \(field.offset), default: \(field.defaultExpression)"
+                lines +=
+                    doc + [
+                        "    public func \(try member(field.name))() -> \(type)? {",
+                        "        \(type)(rawValue: _capnpBuilder.data(\(at)))",
+                        "    }",
+                        "    public mutating func \(try member("set" + upper))(_ value: \(type)) {",
+                    ]
+                lines +=
+                    prelude + ["        _capnpBuilder.setData(value.rawValue, \(at))", "    }"]
+            case .structure(let id):
+                let type = try qualifiedBuilderName(id)
+                lines +=
+                    doc + [
+                        "    @_lifetime(&self)",
+                        "    public mutating func \(try member("init" + upper))() -> \(type) {",
+                    ]
+                lines +=
+                    prelude + [
+                        "        return \(type)(_capnpBuilder.initStruct(at: \(field.offset), dataWords: \(type)._capnpDataWords, pointerCount: \(type)._capnpPointerCount))",
+                        "    }",
+                        "    public mutating func \(try member("clear" + upper))() {",
+                        "        _capnpBuilder.clearPointer(at: \(field.offset))",
+                        "    }",
+                    ]
+            default:
+                continue  // text, data and lists: build item 3
+            }
+        }
+        for child in children(of: node.id) where child.kind == 1 {
+            lines += try renderBuilder(child, depth: depth + 1).map { "    " + $0 }
+        }
+        lines.append("}")
+        return lines
+    }
+
+    /// Statements that zero one union member's storage: data bits, pointers (with their
+    /// subtrees), and a group's fields and own discriminant.
+    private func clearLines(_ field: SchemaField, depth: Int) throws -> [String] {
+        guard depth < 64 else { throw CompilerFailure("excessively nested group \(field.name)") }
+        if let groupID = field.groupID {
+            guard let group = request.nodes[groupID] else {
+                throw CompilerFailure("missing group \(field.name)")
+            }
+            var lines: [String] = []
+            if group.discriminantCount > 0 {
+                lines.append(
+                    "_capnpBuilder.setData(UInt16(0), at: \(group.discriminantOffset), default: UInt16(0))"
+                )
+            }
+            for inner in group.fields { lines += try clearLines(inner, depth: depth + 1) }
+            return lines
+        }
+        switch field.type {
+        case .scalar(.void): return []
+        case .scalar(let scalar):
+            return [
+                "_capnpBuilder.setData(\(scalar.zero), at: \(field.offset), default: \(scalar.zero))"
+            ]
+        case .enumeration:
+            return ["_capnpBuilder.setData(UInt16(0), at: \(field.offset), default: UInt16(0))"]
+        default:
+            return ["_capnpBuilder.clearPointer(at: \(field.offset))"]
+        }
     }
 
     private func swiftType(_ type: FieldType) throws -> String {
