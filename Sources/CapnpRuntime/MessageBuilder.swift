@@ -38,7 +38,7 @@ let builderNestingLimit = 64
 /// offset field (encoding.md "Structs"), and the segment size fits the 32-bit header field.
 /// A larger message needs far pointers and more segments, which this builder doesn't write.
 func builderCapacity(byteCount: Int) -> Int {
-    min(byteCount / 8, Int.max / 64, 1 << 29) * 8
+    min(min(byteCount / 8, Int.max / 64), 1 << 29) * 8
 }
 
 /// Allocation state shared by a `MessageBuilder` and its views.
