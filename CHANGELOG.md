@@ -37,7 +37,8 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   `EnumListBuilder`, `VoidListBuilder`, `TextListBuilder`, `DataListBuilder`,
   `StructListBuilder` and `ListListBuilder` (`CapnpListBuilder`, generated-code only). More
   than 2^29 − 1 elements is `.listTooLong`, and a struct list whose element sizes are
-  outside 0...65535 is `.invalidLayout`. Swift builders rebuild every C++ oracle message
+  outside 0...65535 is `.invalidLayout`. A list view that fails for lack of space keeps
+  its count, so `requiredByteCount` still counts what a loop over `count` writes. Swift builders rebuild every C++ oracle message
   of the test suite byte-equivalently.
 - `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
   closed to outside conformances.
