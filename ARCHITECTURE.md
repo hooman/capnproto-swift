@@ -83,8 +83,10 @@ the protocol’s documented load contract.
 owns the allocation state: bytes used, bytes required, and a sticky `BuildError`. Storage bytes
 0..<8 hold the frame header and 8..<16 the root pointer; the single segment grows from byte 8
 by bump allocation, so every pointer written points forward. The usable size is rounded down
-to whole words and capped at `Int.max / 8` bytes and 2^32 − 1 segment words, so no offset or
-header field overflows on 32-bit targets.
+to whole words and capped at `Int.max / 8` bytes and at 2^29 words (4 GiB). Every object
+follows its pointer in the one segment, so every offset fits the signed 30-bit pointer field
+and the segment size fits the header; neither overflows an `Int` on 32-bit targets. Larger
+messages need far pointers and more segments, which come later.
 
 `StructBuilder` views are exclusive. Each holds a reborrowed `MutableRawSpan` of the whole
 storage (`_mutatingExtracting`) and a SE-0519 `MutableRef<BuildState>`. `initRoot` and

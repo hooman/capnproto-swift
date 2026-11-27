@@ -18,7 +18,8 @@ public enum BuildError: UInt8 {
     case none
     /// The storage is too small. `MessageBuilder.requiredByteCount` gives the size needed.
     case outOfSpace
-    /// A list or text is longer than the wire format allows (lists arrive in a later release).
+    /// A list, text or data has more than 2^29 - 1 elements, or an inline-composite list more
+    /// than 2^29 - 1 words: the wire format's limits.
     case listTooLong
     /// A struct would be nested deeper than 64 levels (the root is level 1), the default
     /// `ReaderOptions` nesting limit, so a default reader could not read it.
@@ -98,7 +99,9 @@ public struct MessageBuilder: ~Copyable, ~Escapable, ~Sendable {
     var state: BuildState
 
     /// Start an empty message in `storage`. It writes only the frame header and a null
-    /// root (16 bytes); the rest of `storage` is zeroed as it is allocated.
+    /// root (16 bytes); the rest of `storage` is zeroed as it is allocated. At most 4 GiB
+    /// of `storage` is used: one segment of 2^29 - 1 words, the most a near pointer can
+    /// span.
     @_lifetime(copy storage)
     public init(storage: consuming MutableRawSpan) {
         let capacity = builderCapacity(byteCount: storage.byteCount)
