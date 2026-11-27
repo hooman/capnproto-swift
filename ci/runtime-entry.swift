@@ -86,10 +86,49 @@ public func capnpEmbeddedBuilderProbe(_ output: UnsafeMutableRawPointer, _ capac
         }
     }
     guard message.error == .none else { return .max }
+    return capnpEmbeddedListProbe(&message)
+}
+
+/// The item 3 paths: text, data and every list builder, rooted for the same audits. The
+/// root is re-initialized with pointers for them, zeroing the scalar root above.
+func capnpEmbeddedListProbe(_ message: inout MessageBuilder) -> UInt64 {
+    do {
+        var root = message.initRoot(dataWords: 1, pointerCount: 8)
+        root.setData(UInt64(7), at: 0, default: 0)
+        root.setText("t".utf8Span, at: 0)
+        var bytes = InlineArray<2, UInt8>(repeating: 9)
+        root.setBytes(bytes.span, at: 1)
+        bytes[0] = 1
+        do {
+            var numbers = root.initList(PrimitiveListBuilder<UInt32>.self, at: 2, count: 2)
+            numbers.setElement(numbers.element(at: 0) &+ 1, at: 1)
+        }
+        do {
+            var bits = root.initList(PrimitiveListBuilder<Bool>.self, at: 3, count: 9)
+            bits.setElement(true, at: 8)
+        }
+        do {
+            var texts = root.initList(TextListBuilder.self, at: 4, count: 1)
+            texts.setElement("u".utf8Span, at: 0)
+        }
+        do {
+            var blobs = root.initList(DataListBuilder.self, at: 5, count: 1)
+            blobs.setElement(bytes.span, at: 0)
+        }
+        do {
+            var matrix = root.initList(
+                ListListBuilder<PrimitiveListBuilder<UInt16>>.self, at: 6, count: 1)
+            var row = matrix.initElement(at: 0, count: 1)
+            row.setElement(3, at: 0)
+        }
+        _ = root.initList(VoidListBuilder.self, at: 7, count: 2)
+        root.clearPointer(at: 7)
+    }
+    guard message.error == .none else { return .max }
     let arena = Arena(framedBytes: message.framedBytes)
     let value = arena.withRoot { root in
-        root.data(at: 5, default: UInt64(0))
-            &+ root.pointerField(at: 0).structure().data(at: 0, default: UInt64(0))
+        root.data(at: 0, default: UInt64(0))
+            &+ widen(root.pointerField(at: 0).text().utf8.count)
     }
     return value &+ widen(message.requiredByteCount)
 }

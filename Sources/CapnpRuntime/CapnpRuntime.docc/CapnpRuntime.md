@@ -18,9 +18,9 @@ Reads are lazy and fail soft — a malformed field returns its schema default an
 the *first* error on the arena, rather than throwing or crashing partway through a
 message. Check ``Arena/error`` after you've read what you need.
 
-Writing messages is arriving in v2: generated builders and ``MessageBuilder`` build structs,
-scalars, enums, groups and unions into caller storage, with the same allocation-free,
-compiler-checked model. Text, data and list fields are not in yet. RPC is out of scope. The
+Writing messages is arriving in v2: generated builders and ``MessageBuilder`` build every
+field type readers support into caller storage, with the same allocation-free,
+compiler-checked model. RPC is out of scope. The
 [package README](https://github.com/hooman/capnproto-swift#readme) has the current status.
 
 ## Topics
@@ -48,6 +48,14 @@ compiler-checked model. Text, data and list fields are not in yet. RPC is out of
 
 - ``MessageBuilder``
 - ``StructBuilder``
+- ``PrimitiveListBuilder``
+- ``EnumListBuilder``
+- ``VoidListBuilder``
+- ``TextListBuilder``
+- ``DataListBuilder``
+- ``StructListBuilder``
+- ``ListListBuilder``
+- ``ListBuilder``
 - ``BuildError``
 
 ### Generated-code support
@@ -58,6 +66,8 @@ Read messages through generated readers where you can.
 
 - ``CapnpStructReader``
 - ``CapnpStructBuilder``
+- ``CapnpListBuilder``
+- ``ListShape``
 - ``CapnpListElement``
 - ``CapnpPrimitive``
 - ``CapnpEnum``

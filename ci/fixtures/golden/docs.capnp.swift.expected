@@ -106,6 +106,12 @@ public enum Capnp_d0c5000000000001 {
         public mutating func `setY`(_ value: Int32) {
             _capnpBuilder.setData(value, at: 1, default: Int32(0))
         }
+        public mutating func `setLabel`(_ value: UTF8Span) {
+            _capnpBuilder.setText(value, at: 0)
+        }
+        public mutating func `clearLabel`() {
+            _capnpBuilder.clearPointer(at: 0)
+        }
         /// Which shape the point marks.
         @_lifetime(&self)
         public mutating func `shape`() -> Capnp_d0c5000000000001.`PointBuilder`.`shapeBuilder` {

@@ -23,13 +23,15 @@ func runPacked() -> UInt64 {
         }
     }
 }
-// The builder probe's frame is 96 bytes: header 8, root pointer 8, root sections 64, child
-// 8, and the re-initialized child 8. A clean build returns 7 + 1 (root and child values) + 96.
+// The builder probe's frame grows to 248 bytes: 96 for the struct builder (header, root
+// pointer, root sections, a child and its re-initialization), then a re-initialized root of
+// 72 and ten one-word allocations for text, data and lists. A clean build returns
+// 7 + 1 (the root value and the text length) + 248.
 func runBuilder() -> UInt64 {
-    var storage = InlineArray<18, UInt64>(repeating: 0)
+    var storage = InlineArray<32, UInt64>(repeating: 0)
     return withUnsafeMutableBytes(of: &storage) { raw in
         unsafe capnpEmbeddedBuilderProbe(raw.baseAddress!, raw.count)
     }
 }
 // 'O' when both reader paths and the builder path ran clean
-_ = putchar(run() == 0 && runPacked() == 0 && runBuilder() == 104 ? 0x4F : 0x58)
+_ = putchar(run() == 0 && runPacked() == 0 && runBuilder() == 256 ? 0x4F : 0x58)

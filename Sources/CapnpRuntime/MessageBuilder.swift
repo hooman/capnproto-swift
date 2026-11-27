@@ -275,15 +275,20 @@ enum Builder {
     }
 
     /// Zero the object pointer `slot` points to, everything below it, and the pointer.
-    /// Only this builder wrote the segment, so every non-null pointer is a near struct
-    /// pointer to an object before `used`; anything else just has its pointer cleared.
+    /// Only this builder wrote the segment, so every non-null pointer is a near struct or
+    /// list pointer to an object before `used`; anything else just has its pointer cleared.
     /// Recursion is bounded by the nesting limit, because nothing deeper is ever built.
     static func zeroObject(in span: inout MutableRawSpan, at slot: Int, used: Int, depth: Int) {
         let low = span.bytes.load(fromByteOffset: slot, as: UInt32.self, .littleEndian)
         let high = span.bytes.load(fromByteOffset: slot + 4, as: UInt32.self, .littleEndian)
         guard low != 0 || high != 0 else { return }
         storePointer(in: &span, at: slot, low: 0, high: 0)
-        guard low & 3 == 0, depth < builderNestingLimit else { return }
+        guard depth < builderNestingLimit else { return }
+        if low & 3 == 1 {
+            zeroList(in: &span, at: slot, low: low, high: high, used: used, depth: depth)
+            return
+        }
+        guard low & 3 == 0 else { return }
         let dataWords = Int(high & 0xFFFF)
         let pointerCount = Int(high >> 16)
         let offsetWords = Int(Int32(bitPattern: low) >> 2)

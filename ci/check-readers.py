@@ -681,32 +681,55 @@ print(run([builders / 'build', *(f'{mode}:{builders / f"swift-{mode}.bin"}' for 
 
 
 def unreachable_words_are_zero(frame: bytes) -> bool:
-    """Walk struct pointers from the root of a one-segment frame; every other word must be 0."""
+    """Walk struct and list pointers from the root of a one-segment frame; every word they
+    don't reach must be 0."""
     count, size = struct.unpack_from('<II', frame, 0)
     assert count == 0 and len(frame) == 8 + size * 8, 'expected one segment'
     words = struct.unpack_from(f'<{size}Q', frame, 8)
     reached = [False] * size
+
+    def mark(start: int, length: int) -> None:
+        for i in range(start, start + length):
+            reached[i] = True
 
     def follow(at: int, depth: int) -> None:
         reached[at] = True
         word = words[at]
         if word == 0 or depth > 64:
             return
-        assert word & 3 == 0, f'only struct pointers expected, word {at}: {word:#x}'
+        kind = word & 3
         offset = ((word & 0xFFFF_FFFF) >> 2) - (1 << 30 if word & 0x8000_0000 else 0)
-        data, pointers = (word >> 32) & 0xFFFF, word >> 48
         start = at + 1 + offset
-        for i in range(start, start + data + pointers):
-            reached[i] = True
-        for i in range(pointers):
-            follow(start + data + i, depth + 1)
+        if kind == 0:
+            data, pointers = (word >> 32) & 0xFFFF, word >> 48
+            mark(start, data + pointers)
+            for i in range(pointers):
+                follow(start + data + i, depth + 1)
+            return
+        assert kind == 1, f'only struct and list pointers expected, word {at}: {word:#x}'
+        code, elements = (word >> 32) & 7, word >> 35
+        if code == 7:  # inline composite: a tag word, then the elements
+            tag = words[start]
+            reached[start] = True
+            n, data, pointers = (tag & 0xFFFF_FFFF) >> 2, (tag >> 32) & 0xFFFF, tag >> 48
+            for e in range(n):
+                base = start + 1 + e * (data + pointers)
+                mark(base, data + pointers)
+                for i in range(pointers):
+                    follow(base + data + i, depth + 2)
+            return
+        bits = [0, 1, 8, 16, 32, 64, 64][code]
+        mark(start, (elements * bits + 63) // 64)
+        if code == 6:
+            for i in range(elements):
+                follow(start + i, depth + 1)
 
     follow(0, 0)
     return all(reached[i] or words[i] == 0 for i in range(size))
 
 
-def canonical(message: bytes) -> bytes:
-    return run([capnp, 'convert', 'binary:canonical', fixture / 'builders.capnp', 'Root'], data=message)
+def canonical(message: bytes, schema: str = 'builders.capnp', typename: str = 'Root') -> bytes:
+    return run([capnp, 'convert', 'binary:canonical', fixture / schema, typename], data=message)
 
 
 for mode, text in builder_messages.items():
@@ -736,6 +759,47 @@ for name, (schema, reject) in builder_rejects.items():
 print(f'PASS: generated builders (reverse oracle: {len(builder_messages)} messages canonical-equal to '
       f'capnp encode, unreachable words zero, capnp decode equal; {len(builder_rejects)} diagnosed)',
       flush=True)
+
+
+# List, text and data builders (D-18 item 3), reverse oracle. Answer key before the generator
+# change: examples-main.swift rebuilds readers.capnp's three oracle contents with generated
+# builders, and each must equal every one of the 9 C++ oracle messages (the same contents at
+# three segment sizes) in canonical form. Modes 20-24 re-set and clear text, lists and union
+# groups that hold pointers; their oracle is the final content.
+examples = work / 'examples'
+examples.mkdir()
+run([swiftc, *flags, *link_flags, '-O', '-parse-as-library', '-I', host, generated,
+     fixture / 'examples-main.swift', host / 'runtime.o', '-o', examples / 'build'])
+example_hygiene = {
+    20: b'(value = 5)',
+    21: b'(numbers = [1])',
+    22: b'(text = "b")',
+    23: b'()',
+    24: b'(matrix = [[8]])',
+}
+example_modes = [0, 1, 2, *example_hygiene]
+print(run([examples / 'build', *(f'{mode}:{examples / f"swift-{mode}.bin"}' for mode in example_modes)])
+      .decode().strip(), flush=True)
+compared = 0
+for mode in example_modes:
+    swift_bytes = (examples / f'swift-{mode}.bin').read_bytes()
+    typename = 'Old' if mode == 2 else 'Example'
+    if mode in example_hygiene:
+        oracles = [run([capnp, 'encode', fixture / 'readers.capnp', typename], data=example_hygiene[mode])]
+    else:
+        oracles = [path.read_bytes() for path in sorted(work.glob(f'message-{mode}-*.bin'))]
+        assert len(oracles) == 3, f'expected 3 segment sizes for mode {mode}'
+    for oracle in oracles:
+        assert canonical(swift_bytes, 'readers.capnp', typename) == canonical(oracle, 'readers.capnp', typename), \
+            f'list builder mode {mode}: canonical form differs'
+        assert run([capnp, 'decode', fixture / 'readers.capnp', typename], data=swift_bytes) == \
+            run([capnp, 'decode', fixture / 'readers.capnp', typename], data=oracle), \
+            f'list builder mode {mode}: capnp decode differs'
+        compared += 1
+    assert unreachable_words_are_zero(swift_bytes), f'list builder mode {mode}: stale unreachable words'
+print(f'PASS: list, text and data builders (reverse oracle: all 9 C++ oracle messages and '
+      f'{len(example_hygiene)} re-set/clear sequences canonical-equal, {compared} comparisons, '
+      f'unreachable words zero)', flush=True)
 
 if not args.host_only:
     embedded = work / 'embedded'

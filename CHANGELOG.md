@@ -23,12 +23,20 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   `ExampleReader`) for scalars, enums, nested structs, groups and unions:
   `message.initRoot(ExampleBuilder.self)`, then `setFoo(_:)`, `foo()`, `initFoo()` and
   `clearFoo()`. Setting a union member zeroes the previous member's storage. Builders are
-  checked against the C++ encoder (`capnp encode`) in canonical form. Text, data and list
-  fields get builder methods in a later release. Existing generated reader code is
+  checked against the C++ encoder (`capnp encode`) in canonical form. Existing generated
+  reader code is
   unchanged; generated files grow by the builder code, which the linker strips when unused
   (about 80 bytes of flash remain in a reader-only Cortex-M4 image).
 - `CapnpRuntime` adds `CapnpStructBuilder` (generated-code only, like `CapnpStructReader`),
   `MessageBuilder.initRoot(_:)` and `StructBuilder.reborrow()`.
+- Text, data and lists can be built. Generated builders get `setFoo(_: UTF8Span)` for text,
+  `setFoo(_: Span<UInt8>)` for data and `initFoo(count:)` for lists, each with `clearFoo()`.
+  `CapnpRuntime` adds `StructBuilder.setText(_:at:)`, `setBytes(_:at:)` and
+  `initList(_:at:count:)`, and the typed list builders `PrimitiveListBuilder`,
+  `EnumListBuilder`, `VoidListBuilder`, `TextListBuilder`, `DataListBuilder`,
+  `StructListBuilder` and `ListListBuilder` (`CapnpListBuilder`, generated-code only). More
+  than 2^29 − 1 elements is `.listTooLong`. Swift builders rebuild every C++ oracle message
+  of the test suite byte-equivalently.
 - `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
   closed to outside conformances.
 
