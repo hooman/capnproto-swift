@@ -10,6 +10,19 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+### Added
+
+- `CapnpRuntime` builds messages: the runtime core of v2 builders (D-18).
+  `MessageBuilder(storage:)` writes one single-segment framed message into a caller
+  `MutableRawSpan` without allocating; `initRoot(dataWords:pointerCount:)` and
+  `StructBuilder.initStruct(at:dataWords:pointerCount:)` return exclusive views, and
+  `setData(_:at:default:)`, `data(at:default:)` and `clearPointer(at:)` write and read
+  fields. Errors are sticky (`BuildError`) and never trap; `requiredByteCount` is the exact
+  size to retry with after `.outOfSpace`. `framedBytes` opens directly in `Arena`. Generated
+  builders, text, data and lists are not in yet.
+- `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
+  closed to outside conformances.
+
 ## [0.3.0] - 2026-11-26
 
 Packed framing: the runtime now reads packed messages, one frame at a time into storage

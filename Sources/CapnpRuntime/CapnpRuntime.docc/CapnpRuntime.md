@@ -18,8 +18,9 @@ Reads are lazy and fail soft — a malformed field returns its schema default an
 the *first* error on the arena, rather than throwing or crashing partway through a
 message. Check ``Arena/error`` after you've read what you need.
 
-This is a **readers-only** library for now. Builders for writing messages are designed
-for v2 but not implemented, and RPC is out of scope. The
+Writing messages is arriving in v2: ``MessageBuilder`` already builds structs and scalars into
+caller storage, with the same allocation-free, compiler-checked model, but generated builders,
+text, data and lists are not in yet. RPC is out of scope. The
 [package README](https://github.com/hooman/capnproto-swift#readme) has the current status.
 
 ## Topics
@@ -42,6 +43,12 @@ for v2 but not implemented, and RPC is out of scope. The
 - ``PointerReader``
 - ``TextReader``
 - ``DataReader``
+
+### Building a message
+
+- ``MessageBuilder``
+- ``StructBuilder``
+- ``BuildError``
 
 ### Generated-code support
 
