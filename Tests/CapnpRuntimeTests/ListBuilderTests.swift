@@ -298,6 +298,8 @@ struct ListBuilderTests {
 
     @Test func countsAndReadsWithoutStorage() {
         // After .outOfSpace every view has no storage: reads give zero, writes do nothing.
+        // Each keeps its requested count, so loops over `count` still count the subtrees
+        // (failedListKeepsItsCountForTheRetry); until F3 this test expected all zeros.
         var counts: [Int] = []
         let built = build(capacity: 24) { root in
             do {
@@ -324,7 +326,7 @@ struct ListBuilderTests {
             }
         }
         #expect(built.error == .outOfSpace)
-        #expect(counts == [0, 0, 0, 0, 0, 0])
+        #expect(counts == [4, 0, 1, 1, 1, 2])
     }
 
     @Test func reinitializingZeroesEveryListEncoding() {
