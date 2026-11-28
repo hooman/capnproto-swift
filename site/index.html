@@ -1,0 +1,170 @@
+<!doctype html>
+<!--
+  The landing page of the published documentation (ci/build-site.py puts it at the site root,
+  in place of DocC's generic shell). Self-contained: no scripts, fonts or external assets.
+  Links are relative to the site root. @VERSION@ is replaced at build time.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>capnproto-swift</title>
+<meta name="description" content="Cap'n Proto for Swift 6.4: an allocation-free, Embedded-clean runtime and a code generator for reading and building messages.">
+<link rel="icon" href="favicon.svg">
+<style>
+:root {
+  --bg: #fbfbfd; --surface: #ffffff; --text: #1d1d1f; --muted: #5b5b61; --line: #e3e3e8;
+  --accent: #b4380f; --accent-text: #ffffff; --code-bg: #f3f3f6; --code-text: #1d1d1f;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114; --surface: #1a1a1f; --text: #ececf1; --muted: #a2a2ab; --line: #2c2c34;
+    --accent: #ff8a5c; --accent-text: #1a0d07; --code-bg: #202027; --code-text: #e8e8ee;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--accent); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+header.top { border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; padding-bottom: 14px; }
+.brand { font-weight: 650; letter-spacing: -.01em; text-decoration: none; color: var(--text); }
+nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 15px; }
+nav a:hover { color: var(--text); }
+.hero { padding: 64px 0 40px; }
+.eyebrow { color: var(--muted); font-size: 14px; letter-spacing: .02em; margin: 0 0 12px; }
+h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.08; letter-spacing: -.025em; margin: 0 0 18px; max-width: 16ch; }
+.lede { font-size: clamp(17px, 2.2vw, 20px); color: var(--muted); max-width: 62ch; margin: 0 0 28px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.button { display: inline-block; padding: 11px 18px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px; border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+section { padding: 36px 0; }
+h2 { font-size: 24px; letter-spacing: -.015em; margin: 0 0 14px; }
+h3 { font-size: 17px; margin: 0 0 8px; }
+p { margin: 0 0 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: var(--shadow); }
+.card p { color: var(--muted); margin: 0; font-size: 15px; }
+pre { background: var(--code-bg); color: var(--code-text); border: 1px solid var(--line); border-radius: 12px; padding: 16px; overflow-x: auto; margin: 0 0 16px; font-size: 13.5px; line-height: 1.5; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+p code, li code { background: var(--code-bg); padding: 1px 5px; border-radius: 5px; font-size: .92em; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.two h3 { color: var(--muted); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: .05em; }
+ul.links { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+ul.links a { display: block; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); text-decoration: none; color: var(--text); }
+ul.links span { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; padding: 24px 0 40px; margin-top: 24px; }
+@media (max-width: 560px) { nav a.optional { display: none; } .hero { padding-top: 40px; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./">capnproto-swift</a>
+    <nav>
+      <a href="documentation/capnpruntime/">API</a>
+      <a class="optional" href="tutorials/capnpruntime/gettingstarted/">Tutorial</a>
+      <a href="https://github.com/hooman/capnproto-swift">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <p class="eyebrow">Version @VERSION@ · Swift 6.4 · MIT</p>
+    <h1>Cap’n Proto for Swift, down to bare metal.</h1>
+    <p class="lede">An allocation-free, Embedded-clean runtime and a code generator for reading and
+      building <a href="https://capnproto.org">Cap’n Proto</a> messages. Readers borrow the bytes
+      instead of copying them, builders write into storage you provide, and malformed input never
+      traps.</p>
+    <div class="actions">
+      <a class="button primary" href="tutorials/capnpruntime/gettingstarted/">Get started</a>
+      <a class="button" href="documentation/capnpruntime/">API reference</a>
+      <a class="button" href="https://github.com/hooman/capnproto-swift">Source on GitHub</a>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap grid">
+      <div class="card"><h3>No allocation</h3><p>The runtime never touches the heap. The Embedded gate compiles it with <code>-no-allocations</code>, so a stray allocation is a build error.</p></div>
+      <div class="card"><h3>Lifetimes the compiler checks</h3><p>Every view is <code>~Escapable</code>: a reader can’t outlive the bytes it borrows, and a builder can’t be used while a child view is alive.</p></div>
+      <div class="card"><h3>Fails soft, never traps</h3><p>A bad field reads its default and records the first error. A build that runs out of space reports the exact size to retry with.</p></div>
+      <div class="card"><h3>32-bit, tested</h3><p>Every message, and suites for 32-bit edge cases, run on WebAssembly and on Cortex-M4 and RV32 under QEMU, with host-identical results.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Install</h2>
+      <p>Install the upstream <code>capnp</code> compiler (<code>brew install capnp</code>), then
+        depend on the package and attach its build-tool plugin to a target holding
+        <code>.capnp</code> schemas:</p>
+<pre><code>dependencies: [
+    .package(url: "https://github.com/hooman/capnproto-swift", .upToNextMinor(from: "@VERSION@"))
+],
+targets: [
+    .executableTarget(
+        name: "Demo",
+        dependencies: [.product(name: "CapnpRuntime", package: "capnproto-swift")],
+        swiftSettings: [.enableExperimentalFeature("Lifetimes")],
+        plugins: [.plugin(name: "CapnpGeneratorPlugin", package: "capnproto-swift")]
+    )
+]</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap two">
+      <div>
+        <h3>Read</h3>
+<pre><code>let arena = Arena(framedBytes: bytes.span.bytes)
+arena.withRoot { root in
+    let person = Capnp_9c3f8a1b2c4d5e6f.PersonReader(root)
+    print(person.id, String(copying: person.name.utf8))
+}
+guard arena.error == .none else { return }  // check after traversal</code></pre>
+      </div>
+      <div>
+        <h3>Build</h3>
+<pre><code>var message = MessageBuilder(storage: span.mutableBytes)
+do {
+    var person = message.initRoot(Capnp_9c3f8a1b2c4d5e6f.PersonBuilder.self)
+    person.setId(1)
+    person.setName("Ada".utf8Span)
+}
+// .outOfSpace: retry with message.requiredByteCount bytes
+guard message.error == .none else { return }
+let framed = message.framedBytes</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Documentation</h2>
+      <ul class="links">
+        <li><a href="tutorials/capnpruntime/gettingstarted/">Getting started<span>A tutorial: schema to decoded message</span></a></li>
+        <li><a href="documentation/capnpruntime/whycapnproto/">Why Cap’n Proto<span>What it buys you, especially on Embedded</span></a></li>
+        <li><a href="documentation/capnpruntime/buildingmessages/">Building messages<span>Builders, storage and retries</span></a></li>
+        <li><a href="documentation/capnpruntime/">API reference<span>Every public type in CapnpRuntime</span></a></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    capnproto-swift @VERSION@ · MIT license ·
+    <a href="https://github.com/hooman/capnproto-swift/blob/main/CHANGELOG.md">Changelog</a> ·
+    <a href="https://github.com/hooman/capnproto-swift#platform-evidence">Platform evidence</a> ·
+    Cap’n Proto is a project of its own authors, at <a href="https://capnproto.org">capnproto.org</a>.
+  </div>
+</footer>
+</body>
+</html>
