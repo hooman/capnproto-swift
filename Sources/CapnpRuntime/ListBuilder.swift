@@ -1,4 +1,4 @@
-// List, text and data builders (D-18 item 3). A list is allocated in one piece by
+// List, text and data builders (ARCHITECTURE.md, "Builders"). A list is allocated in one piece by
 // `Builder.linkList`, which checks every size before multiplying: counts and inline-composite
 // word totals are limited to 2^29 - 1 (`.listTooLong`), and byte sizes that would overflow an
 // `Int` on a 32-bit target are `.outOfSpace`, never a trap. Text is a byte list with its NUL;
@@ -33,7 +33,10 @@ public struct ListShape {
 /// A typed list builder. `CapnpRuntime` provides every conformance; this is not an extension
 /// point, and its requirements may change in a minor release.
 public protocol CapnpListBuilder: ~Copyable, ~Escapable {
+    /// The wire shape this builder writes: what `initList` allocates.
     static var _capnpListShape: ListShape { get }
+    /// Wrap a list of this builder's shape. A runtime builder given a list of another shape
+    /// records ``BuildError/invalidLayout`` and writes nothing.
     @_lifetime(copy list)
     init(_ list: consuming ListBuilder)
 }
@@ -59,6 +62,15 @@ struct ListLayout {
 
 /// An exclusive, writable view of one list in a ``MessageBuilder``. Use a typed builder such as
 /// ``PrimitiveListBuilder`` or ``StructListBuilder``; this untyped view is what they wrap.
+///
+/// Every typed builder's element accessors share one contract:
+/// - An index outside `0..<count` records ``BuildError/invalidLayout``: a write does nothing,
+///   and a read returns zero (or `nil`, for an enum).
+/// - After any failure, writes do nothing and reads return zero, but the subtrees a write would
+///   have created are still counted, so ``MessageBuilder/requiredByteCount`` stays exact.
+/// - `count` is the count the list was initialized with, even when it has no storage because
+///   the build ran out of space. It is 0 only when that count, or the list's shape, was
+///   invalid.
 public struct ListBuilder: ~Copyable, ~Escapable, ~Sendable {
     var segment: MutableRawSpan
     var state: MutableRef<BuildState>
@@ -74,10 +86,11 @@ public struct ListBuilder: ~Copyable, ~Escapable, ~Sendable {
         self.layout = layout
     }
 
-    /// The number of elements.
+    /// The number of elements (see the type's contract for `count` after a failure).
     public var count: Int { layout.count }
 
-    /// Whether `index` is an element; records `.invalidLayout` if not.
+    /// Whether element `index` can be written: it is in range, the list has storage and no
+    /// failure happened. An index out of range also records `.invalidLayout`.
     mutating func check(_ index: Int) -> Bool {
         guard index >= 0, index < layout.count else {
             state.value.fail(.invalidLayout)
@@ -88,6 +101,7 @@ public struct ListBuilder: ~Copyable, ~Escapable, ~Sendable {
 
     func primitive<T: CapnpPrimitive>(at index: Int) -> T {
         guard layout.live, index >= 0, index < layout.count else { return T.zero }
+        // The bit offset fits an `Int`: storage is under `Int.max / 8` bytes (builderCapacity).
         return T.loadUnmasked(
             from: segment.bytes, atBitOffset: layout.start * 8 + index * T.sizeInBits,
             default: T.zero)
@@ -95,6 +109,7 @@ public struct ListBuilder: ~Copyable, ~Escapable, ~Sendable {
 
     mutating func setPrimitive<T: CapnpPrimitive>(_ value: T, at index: Int) {
         guard check(index) else { return }
+        // The bit offset fits an `Int`, as in `primitive(at:)`.
         T.storeMasked(
             value, into: &segment, atBitOffset: layout.start * 8 + index * T.sizeInBits,
             default: T.zero)
@@ -128,8 +143,11 @@ public struct PrimitiveListBuilder<Element: CapnpPrimitive>: ~Copyable, ~Escapab
     @_lifetime(copy list)
     public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
+    /// The number of elements; see ``ListBuilder`` for its value after a failure.
     public var count: Int { list.count }
+    /// Element `index`, or zero; see ``ListBuilder`` for the contract.
     public func element(at index: Int) -> Element { list.primitive(at: index) }
+    /// Write element `index`; see ``ListBuilder`` for the contract.
     public mutating func setElement(_ value: Element, at index: Int) {
         list.setPrimitive(value, at: index)
     }
@@ -144,11 +162,13 @@ public struct EnumListBuilder<Element: CapnpEnum>: ~Copyable, ~Escapable, ~Senda
     @_lifetime(copy list)
     public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
+    /// The number of elements; see ``ListBuilder`` for its value after a failure.
     public var count: Int { list.count }
     /// The element, or nil for an ordinal unknown to this schema version.
     public func element(at index: Int) -> Element? {
         Element(rawValue: list.primitive(at: index) as UInt16)
     }
+    /// Write element `index`; see ``ListBuilder`` for the contract.
     public mutating func setElement(_ value: Element, at index: Int) {
         list.setPrimitive(value.rawValue, at: index)
     }
@@ -161,6 +181,7 @@ public struct VoidListBuilder: ~Copyable, ~Escapable, ~Sendable, CapnpListBuilde
     @_lifetime(copy list)
     public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
+    /// The number of elements; see ``ListBuilder`` for its value after a failure.
     public var count: Int { list.count }
 }
 
@@ -171,8 +192,10 @@ public struct TextListBuilder: ~Copyable, ~Escapable, ~Sendable, CapnpListBuilde
     @_lifetime(copy list)
     public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
+    /// The number of elements; see ``ListBuilder`` for its value after a failure.
     public var count: Int { list.count }
-    /// Copy `text` and its NUL terminator into the message as element `index`.
+    /// Copy `text` and its NUL terminator into the message as element `index`, zeroing any
+    /// object already there.
     public mutating func setElement(_ text: UTF8Span, at index: Int) {
         let slot = list.slot(index)
         Builder.setBlob(
@@ -188,8 +211,9 @@ public struct DataListBuilder: ~Copyable, ~Escapable, ~Sendable, CapnpListBuilde
     @_lifetime(copy list)
     public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
+    /// The number of elements; see ``ListBuilder`` for its value after a failure.
     public var count: Int { list.count }
-    /// Copy `bytes` into the message as element `index`.
+    /// Copy `bytes` into the message as element `index`, zeroing any object already there.
     public mutating func setElement(_ bytes: Span<UInt8>, at index: Int) {
         let slot = list.slot(index)
         Builder.setBlob(
@@ -211,6 +235,7 @@ public struct StructListBuilder<Element: CapnpStructBuilder & ~Copyable & ~Escap
     @_lifetime(copy list)
     public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
+    /// The number of elements; see ``ListBuilder`` for its value after a failure.
     public var count: Int { list.count }
 
     /// An exclusive view of element `index`. Elements are allocated with the list and start
@@ -239,6 +264,7 @@ public struct ListListBuilder<Inner: CapnpListBuilder & ~Copyable & ~Escapable>:
     @_lifetime(copy list)
     public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
+    /// The number of elements; see ``ListBuilder`` for its value after a failure.
     public var count: Int { list.count }
 
     /// Initialize element `index` as a list of `count` elements, zeroing any list already

@@ -1,4 +1,5 @@
-// Builders (D-18) write one single-segment framed message into storage the caller provides.
+// Builders write one single-segment framed message into storage the caller provides (design:
+// ARCHITECTURE.md, "Builders").
 // The frame header occupies storage bytes 0..<8, the root pointer 8..<16, and the segment
 // grows from byte 8 by bump allocation, so every pointer the builder writes points forward.
 // Allocation zeroes what it hands out; nothing outside the storage is ever written.
@@ -6,12 +7,14 @@
 // Views are exclusive: `MessageBuilder` and `StructBuilder` are `~Copyable, ~Escapable`, and a
 // child borrows its parent through `mutating` + `@_lifetime(&self)`. Each view holds a
 // reborrowed `MutableRawSpan` of the whole storage plus a `MutableRef` to the shared
-// allocation state, so no `unsafe` is needed (2026-11-26 probe, design *Probe*).
+// allocation state, so no `unsafe` is needed (a probe on Swift 6.4.2, 2026-11-26, before the
+// design was fixed).
 //
 // Failure is sticky and never traps: the first error is kept, later writes are no-ops, and
 // allocation keeps counting, so `requiredByteCount` is the exact size a successful build of
-// the same calls needs. Accessors are methods, not properties: on Swift 6.4.2 a public
-// get/set property on these views emits an allocating `modify` coroutine.
+// the same calls needs. Accessors are methods, not properties: a public get/set property on
+// these views emits an allocating `modify` coroutine [Swift 6.4.2, 2026-11-26]. Revisit when
+// the Embedded-clean gate accepts such a property.
 
 /// The first failure while building a message.
 public enum BuildError: UInt8 {
@@ -22,11 +25,15 @@ public enum BuildError: UInt8 {
     /// A list, text or data has more than 2^29 - 1 elements, or an inline-composite list more
     /// than 2^29 - 1 words: the wire format's limits.
     case listTooLong
-    /// A struct would be nested deeper than 64 levels (the root is level 1), the default
-    /// `ReaderOptions` nesting limit, so a default reader could not read it.
+    /// An object would be nested deeper than 64 levels, the default `ReaderOptions` nesting
+    /// limit, so a default reader could not read it. The root struct is level 1; each struct,
+    /// list, text or data below it adds a level, and a struct-list element one more, as in
+    /// the reader.
     case nestingLimit
-    /// A field offset or pointer index outside the struct, or a size outside 0...65535.
-    /// Generated code never does this.
+    /// A field offset or pointer index outside the struct, a struct size outside 0...65535,
+    /// a negative list count, an element index outside its list, or a typed list builder
+    /// given a list of another shape. Generated code never gets the sizes or shapes wrong;
+    /// indexes and counts come from the caller.
     case invalidLayout
     /// The message needs more storage than any builder can use, so no retry can succeed:
     /// 4 GiB on a 64-bit target and 268,435,448 bytes (256 MiB less 8) on a 32-bit one
@@ -36,7 +43,8 @@ public enum BuildError: UInt8 {
     case messageTooLarge
 }
 
-/// Deepest struct a builder creates; matches `ReaderOptions.defaultNestingLimit`.
+/// Deepest level a builder creates (see `BuildError.nestingLimit` for how levels count);
+/// matches `ReaderOptions.defaultNestingLimit`.
 let builderNestingLimit = 64
 
 /// Usable bytes of a builder storage of `byteCount` bytes: whole words, at most
@@ -199,9 +207,13 @@ public struct StructBuilder: ~Copyable, ~Escapable, ~Sendable {
         return offset >= 0 && bits >= width && offset <= (bits - width) / width
     }
 
-    /// Read back a scalar, applying the schema default as a reader does.
+    /// Read back a scalar, applying the schema default as a reader does. An offset outside the
+    /// data section, or a view without storage after a failure, reads `value` and records no
+    /// error, as a reader does for a field an older writer did not have (``setData(_:at:default:)``
+    /// records `.invalidLayout` for the same offset).
     public func data<T: CapnpPrimitive>(at offset: Int, default value: T) -> T {
         guard layout.live, fieldFits(T.self, at: offset) else { return value }
+        // The bit offset fits an `Int`: storage is under `Int.max / 8` bytes (builderCapacity).
         return T.loadUnmasked(
             from: segment.bytes, atBitOffset: layout.start * 8 + offset * T.sizeInBits,
             default: value)
@@ -214,6 +226,7 @@ public struct StructBuilder: ~Copyable, ~Escapable, ~Sendable {
             return
         }
         guard layout.live, state.value.error == .none else { return }
+        // The bit offset fits an `Int`: storage is under `Int.max / 8` bytes (builderCapacity).
         T.storeMasked(
             value, into: &segment, atBitOffset: layout.start * 8 + offset * T.sizeInBits,
             default: d)
@@ -324,6 +337,10 @@ enum Builder {
             return
         }
         guard low & 3 == 0 else { return }
+        // Concrete `Int(UInt32)` and `Int(Int32)` conversions, not the generic ones Widen.swift
+        // avoids: these do not allocate on 32-bit Embedded, which check-cross.py and
+        // check-qemu.py compile with -no-allocations. The sign-extended offset was written by
+        // this builder, so it is forward and under 2^29 words (builderCapacity).
         let dataWords = Int(high & 0xFFFF)
         let pointerCount = Int(high >> 16)
         let offsetWords = Int(Int32(bitPattern: low) >> 2)
@@ -344,7 +361,7 @@ enum Builder {
     }
 }
 
-// MARK: - Generated builders (D-18 item 2)
+// MARK: - Generated builders
 
 /// A generated struct builder. Conformances come from `capnpc-swift`; this is not an
 /// extension point, and its requirements may change in a minor release.
