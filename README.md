@@ -34,7 +34,7 @@ or Xcode's Product ▸ Build Documentation.
 | WebAssembly / WASI | ✅ Full and Embedded Swift run every oracle message (aligned, unaligned and packed) and the 32-bit edge checks under WasmKit |
 | Static Linux (musl) | 🟡 Verified locally on 6.4.2 (`aarch64` native, `x86_64` under Rosetta); not yet on native `x86_64` hardware |
 | Embedded builds with full debug info (`-g`) | 🟡 Swift 6.4.0–6.4.2 need `-gline-tables-only`; fixed on `main` (see *Embedded debug info*) |
-| Writing messages (builders) | 🟡 On `main`, unreleased: generated builders for every field type readers support, rebuilding all 9 C++ oracle messages byte-equivalently (see *Build a message*). Not yet released or run on hardware |
+| Writing messages (builders) | ✅ Since `0.4.0`: generated builders for every field type readers support, rebuilding all 9 C++ oracle messages byte-equivalently (see *Build a message*), and run on an ESP32-C6. On `main`, unreleased: packed output (`Packed.pack`), byte-identical to `capnp encode --packed` |
 | RPC / capabilities | ⬜ Out of scope |
 | Tagged release | ✅ `0.4.0`, see [CHANGELOG.md](CHANGELOG.md) |
 
@@ -167,6 +167,23 @@ walking its body, so a few packed bytes cannot make the unpacker write more than
 allowed. Zero and literal runs may cross the segment table and segment boundaries, but
 not the end of the frame.
 
+*Unreleased, on `main`:* to send a message packed, `Packed.pack(_:into:)` packs one framed
+message, such as a builder's `framedBytes`, into storage you provide, and
+`Packed.packedFrameByteCount(_:)` gives its size first. The output is byte-identical to
+`capnp encode --packed`: as in the C++ encoder, runs restart at the segment table and at each
+segment. Nothing is written past the output, and nothing is allocated.
+
+```swift
+func sendPacked(_ message: borrowing MessageBuilder, _ send: (RawSpan) -> Void) {
+    guard message.error == .none else { return }
+    var storage = InlineArray<640, UInt8>(repeating: 0)  // packedFrameByteCount gives the need
+    var bytes = storage.mutableSpan
+    var output = bytes.mutableBytes
+    guard let (_, written) = Packed.pack(message.framedBytes, into: &output) else { return }
+    send(output.bytes.extracting(0..<written))
+}
+```
+
 Lists expose `count` and indexed access (`for i in 0..<list.count`) through
 `PrimitiveList<Element>`, `EnumList<Element>`, `VoidList`, and unified generic
 `CapnpList<Element>`.
@@ -258,7 +275,7 @@ the wire level.
 
 ## Supported scope
 
-- Standard framing, unpacked or packed (`Packed.unpackFrame` into caller storage),
+- Standard framing, unpacked or packed (`Packed.unpackFrame`, and on `main` `Packed.pack`, into caller storage),
   multiple segments, single- and double-far pointers.
 - Void, Bool, all signed/unsigned 8/16/32/64-bit integers, Float32/64, Text, Data,
   structs, nested structs, enums, lists (including lists of lists), groups, and unions.
@@ -286,8 +303,8 @@ The generator diagnoses, in the files it generates:
 
 An unused interface in an imported file doesn't block generation.
 
-Not provided yet: copying a reader into a builder, multi-segment or packed output, RPC, a
-streaming packed decoder, a public async API, or a
+Not provided yet: copying a reader into a builder, multi-segment output, RPC, a streaming
+packed decoder or encoder, a public async API, or a
 `Sendable` arena. Apple targets require OS 27 (macOS, iOS, watchOS, tvOS, visionOS), where
 SE-0525's safe `RawSpan` loads are available; non-Apple targets have no OS gate.
 
