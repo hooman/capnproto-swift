@@ -93,7 +93,7 @@ def build(name, target):
          '-emit-module-path', out / 'CapnpRuntime.swiftmodule', *sources, '-c', '-o', out / 'runtime.o'])
     run([*swift, '-I', out, '-module-name', 'image', '-c', readers / 'readers.capnp.swift',
          root / 'ci/fixtures/verify.swift', root / 'ci/fixtures/edges32.swift', root / 'ci/fixtures/build32.swift', root / 'ci/fixtures/genbuild32.swift',
-         root / 'ci/qemu/main.swift',
+         root / 'ci/fixtures/embedded-driver.swift', root / 'ci/qemu/main.swift',
          '-o', out / 'image.o'])
     run([tool['clang'], '-target', target['triple'], *target['clang'], '-ffreestanding', '-fno-builtin', '-Os',
          '-c', root / 'ci/qemu/start.c', '-o', out / 'start.o'])
