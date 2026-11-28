@@ -153,13 +153,15 @@ for name, flags in variants.items():
         assert re.search(r'PASS mode=99 checks=8\b', edge_out), f'{name}/{runner}/mode=99: {edge_out!r}'
         # 32-bit packed suite: hostile segment tables, amplification, a segment-crossing run.
         packed_out = run([*command, wasm], data=bytes([98, 0]) + bytes(6))
-        assert re.search(r'PASS mode=98 checks=5\b', packed_out), f'{name}/{runner}/mode=98: {packed_out!r}'
+        # The 2 MiB hostile table (R1) needs a heap array, so only the full variant runs it.
+        packed_checks = 6 if name == 'full' else 5
+        assert re.search(rf'PASS mode=98 checks={packed_checks}\b', packed_out), f'{name}/{runner}/mode=98: {packed_out!r}'
         # 32-bit builder suite (D-18): layouts, out-of-space sweep with guard bytes, limits.
         build_out = run([*command, wasm], data=bytes([97, 0]) + bytes(6))
         assert re.search(r'PASS mode=97 checks=8\b', build_out), f'{name}/{runner}/mode=97: {build_out!r}'
         gen_out = run([*command, wasm], data=bytes([96, 0]) + bytes(6))
         assert re.search(r'PASS mode=96 checks=3\b', gen_out), f'{name}/{runner}/mode=96: {gen_out!r}'
         print(f'PASS wasm {name} under {runner}: {len(messages)} aligned + 2 unaligned oracle messages, '
-              f'{len(messages)} packed, 8 32-bit edge checks, 5 packed, 8 builder and 3 generated-builder ({wasm.stat().st_size} bytes)',
+              f'{len(messages)} packed, 8 32-bit edge checks, {packed_checks} packed, 8 builder and 3 generated-builder ({wasm.stat().st_size} bytes)',
               flush=True)
 print('WASM CHECK: PASS', flush=True)
