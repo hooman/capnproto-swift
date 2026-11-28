@@ -43,6 +43,16 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 - `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
   closed to outside conformances.
 
+### Fixed
+
+- `TextReader`'s borrowing iterator no longer traps when asked for the rest of the text:
+  `nextSpan(maxCount: .max)` returns the remaining bytes, then an empty span, as `Span`'s
+  own iterator does. It used to overflow on the second call, on every platform.
+- On 32-bit targets, `Packed.unpackedFrameByteCount` rejects a frame whose segment table is
+  longer than `Int.max / 8` bytes, as `Arena(framedBytes:)` does, instead of overflowing
+  while it walks the table. Only reachable with `segmentLimit` raised far above its default
+  of 512.
+
 ## [0.3.0] - 2026-11-26
 
 Packed framing: the runtime now reads packed messages, one frame at a time into storage
