@@ -10,9 +10,17 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-28
+
+The first release with builders: generated builders write every field type readers support
+into caller storage, without allocating.
+
 ### Added
 
-- `CapnpRuntime` builds messages: the runtime core of v2 builders (D-18).
+- Verified on real hardware: every oracle message and the 32-bit suites run on an ESP32-C6
+  (RISC-V `rv32imac`) board with host-identical results and an unchanged heap
+  (`ci/check-esp32c6.py`, run locally; see the README's platform evidence).
+- `CapnpRuntime` builds messages: the runtime core of the builders.
   `MessageBuilder(storage:)` writes one single-segment framed message into a caller
   `MutableRawSpan` without allocating; `initRoot(dataWords:pointerCount:)` and
   `StructBuilder.initStruct(at:dataWords:pointerCount:)` return exclusive views, and
