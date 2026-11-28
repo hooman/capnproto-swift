@@ -23,13 +23,13 @@ TestNewUnionVersion: ok
 TestStructUnion: ok
 TestPrintInlineStructs: ok
 TestWholeFloatDefault: ok
-TestGenerics: generic structs are outside readers-only v1
+TestGenerics: generic structs are unsupported
 BoxedText: ok
-TestGenericsWrapper: generic structs are outside readers-only v1
+TestGenericsWrapper: generic structs are unsupported
 TestGenericsWrapper2: referenced type 12228031604858979421 is not a supported nongeneric struct
 TestImplicitMethodParams: unsupported declaration kind 3 in test.capnp
 TestImplicitMethodParamsInGeneric: unsupported declaration kind 3 in test.capnp
-TestGenericsUnion: generic structs are outside readers-only v1
+TestGenericsUnion: generic structs are unsupported
 TestUseGenerics: duplicate field or unsupported non-empty pointer default: default
 TestEmptyStruct: ok
 TestConstants: unsupported constant type 14: uint32ListConst
