@@ -45,6 +45,16 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 - `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
   closed to outside conformances.
 
+### Changed
+
+- Every generated file's header has one more line, for builders: check `message.error` before
+  `framedBytes`. No generated code changes.
+- `capnpc-swift`'s diagnostic for a generic struct reads "generic structs are unsupported".
+- `capnpc-swift --version` prints `0.4.0`.
+- Documentation: a first full comment-review pass over the package. Public reader and builder
+  members now document what an index out of range, a null pointer or an earlier failure
+  gives, and DocC has a **Building messages** article. The tutorial depends on `0.4.0`.
+
 ### Fixed
 
 - `TextReader`'s borrowing iterator no longer traps when asked for the rest of the text:
