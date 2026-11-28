@@ -5,7 +5,7 @@ let package = Package(
     name: "GettingStarted",
     platforms: [.macOS(.v27)],
     dependencies: [
-        .package(url: "https://github.com/hooman/capnproto-swift", .upToNextMinor(from: "0.3.0"))
+        .package(url: "https://github.com/hooman/capnproto-swift", .upToNextMinor(from: "0.4.0"))
     ],
     targets: [
         .executableTarget(

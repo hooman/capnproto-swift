@@ -98,7 +98,7 @@ enum RequestDecoder {
     }
 
     // Annotations (Node pointer 2, Field pointer 1) are never read: they carry no wire
-    // meaning, and rejecting them failed any request that imported /capnp/c++.capnp (D-17).
+    // meaning, and rejecting them failed any request that imported /capnp/c++.capnp.
     static func node(_ reader: borrowing StructReader) throws -> SchemaNode {
         let kind = reader.data(at: 6, default: UInt16(0))
         var nested: [(UInt64, String)] = []

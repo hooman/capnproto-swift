@@ -1,5 +1,5 @@
 // SwiftPM build-tool plugin: turn every .capnp schema in a target into generated Swift
-// readers at build time. The plugin only *describes* commands; capnp runs them and
+// readers and builders at build time. The plugin only *describes* commands; capnp runs them and
 // invokes capnpc-swift, which writes relative to the output directory capnp selects.
 //
 // Consuming targets must still enable the Lifetimes experimental feature and depend on

@@ -24,10 +24,10 @@ Before opening a PR, keep these project invariants in mind (see
   build with `-strict-memory-safety -warnings-as-errors`.
 - **Single Embedded-clean generated API:** no `Foundation`, existential dispatch, or
   mutable message storage in `CapnpRuntime` or generated readers.
-- **Scope:** the released library is readers-only, synchronous, and non-`Sendable`
-  (`~Sendable`). Builders are designed for v2 and follow the same rules: caller-provided
-  storage, no allocation, no `Sendable`. Discuss scope changes in an issue before
-  implementing.
+- **Scope:** the library reads and builds messages, synchronously, and its views are
+  non-`Sendable` (`~Sendable`). Builders follow the readers' rules: caller-provided storage,
+  no allocation, no traps. RPC, multi-segment output and orphans are out of scope today.
+  Discuss scope changes in an issue before implementing.
 
 ## Local Verification
 

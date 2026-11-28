@@ -1,12 +1,17 @@
 // Preserve the wire stride separately from the visible element layout. This lets
 // old schemas read prefixes of upgraded struct lists without repacking or allocation.
 // Indexed access also keeps borrowed element lifetimes explicit; these views do not
-// conform to Sequence, whose element requirements do not fit this v1 borrowed API.
+// conform to Sequence, whose element requirements do not fit borrowed, nonescapable elements.
 
 /// Indexed view of all list encodings, including primitive/struct schema upgrades.
+///
+/// Every element accessor shares one contract: an index outside `0..<count` records
+/// `.invalidIndex` and returns the default (zero, an empty view, or a null pointer). The typed
+/// lists (``CapnpList``, ``PrimitiveList``, ``EnumList``, ``VoidList``) index through it.
 public struct ListReader: ~Escapable, ~Sendable {
     let context: ReadContext
     let startByte: Int
+    /// The number of elements.
     public let count: Int
     let stepBits: Int
     let dataBits: Int
@@ -32,21 +37,28 @@ public struct ListReader: ~Escapable, ~Sendable {
         self.nestingLimit = nestingLimit
     }
 
+    /// Check that `index` is an element of a `List(Void)`; there is nothing to read.
     public func void(at index: Int) {
         if index < 0 || index >= count { context.report(.invalidIndex) }
     }
 
+    /// Scalar element `index`, or `value` (see the type's contract).
     public func data<T: CapnpPrimitive>(at index: Int, default value: T) -> T {
         guard index >= 0, index < count else {
             context.report(.invalidIndex)
             return value
         }
+        // Elements with no data section (a pointer list upgraded to scalars, say) read as the
+        // default with no error: schema evolution, not a malformed message (encoding.md,
+        // "Lists").
         guard T.sizeInBits <= dataBits else { return value }
         return T.loadUnmasked(
             from: context.bytes,
             atBitOffset: startByte * 8 + index * stepBits, default: value)
     }
 
+    /// Struct element `index`, or an empty struct whose fields read their defaults (see the
+    /// type's contract). Opening an element costs a nesting level.
     @_lifetime(copy self)
     public func structure(at index: Int) -> StructReader {
         guard index >= 0, index < count else {
@@ -70,6 +82,8 @@ public struct ListReader: ~Escapable, ~Sendable {
             segmentID: segmentID, nestingLimit: nestingLimit - 1)
     }
 
+    /// Pointer element `index` (see the type's contract). Elements with no pointer section
+    /// read as a null pointer with no error, as schema evolution allows.
     @_lifetime(copy self)
     public func pointer(at index: Int) -> PointerReader {
         guard index >= 0, index < count else {
@@ -123,8 +137,10 @@ public struct CapnpList<Element: CapnpListElement & ~Escapable>:
         self.reader = reader
     }
 
+    /// The number of elements.
     public var count: Int { reader.count }
 
+    /// Element `index`; an index out of range records `.invalidIndex` (``ListReader``).
     public subscript(index: Int) -> Element {
         @_lifetime(copy self)
         get { Element.decodeElement(from: reader, at: index) }
@@ -147,7 +163,9 @@ public struct VoidList: ~Escapable, ~Sendable, CapnpListElement {
         self.reader = reader
     }
 
+    /// The number of elements.
     public var count: Int { reader.count }
+    /// Element `index`; an index out of range records `.invalidIndex` (``ListReader``).
     public subscript(index: Int) -> Void { reader.void(at: index) }
 
     public static var listElementEncoding: ElementSize { .pointer }
@@ -171,7 +189,9 @@ public struct PrimitiveList<Element: CapnpPrimitive>: ~Escapable, ~Sendable, Cap
         self.zero = zero
     }
 
+    /// The number of elements.
     public var count: Int { reader.count }
+    /// Element `index`; an index out of range records `.invalidIndex` (``ListReader``).
     public subscript(index: Int) -> Element { reader.data(at: index, default: zero) }
 
     public static var listElementEncoding: ElementSize { .pointer }
@@ -203,6 +223,7 @@ public struct EnumList<Element: CapnpEnum>: ~Escapable, ~Sendable, CapnpListElem
         self.reader = reader
     }
 
+    /// The number of elements.
     public var count: Int { reader.count }
 
     /// The enumerant at `index`, or `nil` for an ordinal this schema version does not know.

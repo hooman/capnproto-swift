@@ -12,7 +12,7 @@ private func fail(_ error: any Error) -> Never {
 if CommandLine.arguments.count > 1 {
     switch CommandLine.arguments.dropFirst().joined(separator: " ") {
     case "--version":
-        print("capnpc-swift 0.3.0")
+        print("capnpc-swift 0.4.0")
         exit(0)
     case "--help":
         print("Usage: capnp compile -o /path/to/capnpc-swift[:output-directory] schema.capnp")
@@ -63,6 +63,7 @@ private func resolveOutputDestination(
             current = candidate
         }
     }
+    // `components` is non-empty: the guard above rejected an empty path.
     let destination = current.appendingPathComponent(String(components.last!), isDirectory: false)
         .standardizedFileURL
     guard destination.path.hasPrefix(rootPrefix) else {

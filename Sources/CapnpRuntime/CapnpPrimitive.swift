@@ -30,7 +30,7 @@ public protocol CapnpPrimitive {
     /// `bit` is a multiple of 8 for every supported type except Bool.
     static func loadUnmasked(from span: RawSpan, atBitOffset bit: Int, default: Self) -> Self
 
-    /// Store `value` XOR `default` at carrier-relative `bit` (builders, D-18).
+    /// Store `value` XOR `default` at carrier-relative `bit`, for builders.
     /// Caller must validate the complete element range in `span` before calling.
     static func storeMasked(
         _ value: Self, into span: inout MutableRawSpan, atBitOffset bit: Int, default: Self)

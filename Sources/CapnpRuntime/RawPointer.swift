@@ -78,7 +78,7 @@ struct RawPointer {
 
     // MARK: Other / capability (kind == .other)
 
-    /// Capability-table index. The v1 resolver deliberately returns empty views for
-    /// capabilities because readers-only v1 has no RPC capability table.
+    /// Capability-table index. The resolver deliberately returns empty views for
+    /// capabilities: this runtime has no RPC, so there is no capability table.
     var capabilityIndex: UInt32 { highWord }
 }

@@ -79,7 +79,7 @@ the protocol’s documented load contract.
 
 ## Builders
 
-`MessageBuilder: ~Copyable, ~Escapable, ~Sendable` (D-18) borrows a caller `MutableRawSpan` and
+`MessageBuilder: ~Copyable, ~Escapable, ~Sendable` borrows a caller `MutableRawSpan` and
 owns the allocation state: bytes used, bytes required, and a sticky `BuildError`. Storage bytes
 0..<8 hold the frame header and 8..<16 the root pointer; the single segment grows from byte 8
 by bump allocation, so every pointer written points forward. The usable size is rounded down
@@ -100,10 +100,14 @@ struct is encoded with offset −1. Re-initializing a pointer, or `clearPointer`
 the old object and its subtree recursively; recursion is bounded because no struct deeper
 than 64 levels (`.nestingLimit`, the default reader limit) is ever built. After a failure,
 views carry their sizes but no storage: writes are no-ops, and allocation keeps counting, so
-`requiredByteCount` is exact for a retry. Lists are allocated whole by `Builder.linkList`: element counts and
+`requiredByteCount` is exact for a retry. Past the most any storage can hold, allocation
+fails `.messageTooLarge` instead, replacing an earlier `.outOfSpace`, since no retry could
+succeed. Lists are allocated whole by `Builder.linkList`: element counts and
 inline-composite word totals are checked against 2^29 − 1 before any multiplication
 (`.listTooLong`), word counts are derived by division so they cannot overflow, and a byte
-size that would overflow a 32-bit `Int` is `.outOfSpace`. Text is a byte list with its NUL
+size that would overflow a 32-bit `Int` is `.messageTooLarge`. Each typed list builder
+checks that the list it wraps has its shape, so a hand-written `CapnpListBuilder` cannot pair
+one shape with another builder's accessors (`.invalidLayout`). Text is a byte list with its NUL
 and data has none; both are copied a word at a time. Typed list builders
 (`PrimitiveListBuilder`, `EnumListBuilder`, `VoidListBuilder`, `TextListBuilder`,
 `DataListBuilder`, `StructListBuilder`, `ListListBuilder`) wrap an untyped `ListBuilder` and
@@ -174,7 +178,7 @@ storage in the runtime or generated output.
 
 ## Validation boundaries
 
-Host tests (88 tests, 97.4% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
+Host tests (96 tests, 97.5% `CapnpRuntime` line coverage on 6.4.2) cover scalar decoding, framing,
 packed framing (hand-packed frames, including boundary-crossing runs and hostile tables),
 far pointers, all list encodings, nested generic lists, UTF-8/Span/Iterable blob views,
 malformed ranges, shared budgets, nesting, and single- and multi-segment deterministic

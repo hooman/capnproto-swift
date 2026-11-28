@@ -45,6 +45,9 @@ public struct StructReader: ~Escapable, ~Sendable {
         return context.word(at: ptrStartByte + index * 8)
     }
 
+    /// Pointer field `index`. An index past the pointer section reads as a null pointer with
+    /// no error: a message from an older schema simply lacks the field (encoding.md,
+    /// "Structs").
     @_lifetime(copy self)
     public func pointerField(at index: Int) -> PointerReader {
         PointerReader(
