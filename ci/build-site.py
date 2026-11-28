@@ -54,6 +54,7 @@ def resolves(link):
 # 1. DocC, as Pages serves it.
 if out.exists():
     shutil.rmtree(out)
+out.parent.mkdir(parents=True, exist_ok=True)  # DocC fails if the output's parent is missing
 subprocess.run(['swift', 'package', '--disable-sandbox', '--allow-writing-to-directory', str(out),
                 'generate-documentation', '--target', 'CapnpRuntime', '--warnings-as-errors',
                 '--transform-for-static-hosting', '--hosting-base-path', 'capnproto-swift',
