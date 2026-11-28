@@ -394,6 +394,12 @@ extension Builder {
         _ bytes: Span<UInt8>, nul: Bool, in span: inout MutableRawSpan, state: inout BuildState,
         slot: Int, depth: Int
     ) {
+        // Check before adding the NUL: on a 32-bit target a text of Int.max bytes would
+        // overflow `count + 1`.
+        guard bytes.count <= maxListCount - (nul ? 1 : 0) else {
+            state.fail(.listTooLong)
+            return
+        }
         let list = linkList(
             in: &span, state: &state, slot: slot, shape: ListShape(.byte),
             count: bytes.count + (nul ? 1 : 0), depth: depth)
