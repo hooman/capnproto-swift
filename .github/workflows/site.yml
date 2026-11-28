@@ -1,0 +1,103 @@
+name: site
+
+# Build and publish the documentation site at https://hooman.github.io/capnproto-swift/: DocC
+# behind the landing page (ci/build-site.py), plus the README's badge data (ci/site-badges.py).
+# release.yml calls this after it tags a release. Run it by hand to republish a released tag:
+#
+#   gh workflow run site.yml -R hooman/capnproto-swift -f tag=0.4.0
+#
+# Build and deploy are separate jobs, the pattern actions/deploy-pages documents. The artifact's
+# name includes the run attempt, because every attempt of a run uploads its own, and
+# deploy-pages refuses a run with more than one artifact of the name it's given.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit or tag to build
+        required: true
+        type: string
+      version:
+        description: Version shown on the landing page
+        required: true
+        type: string
+      capnp_versions:
+        description: "Space-separated capnp versions the gates tested (default: the build's own)"
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Released tag to publish (e.g. 0.4.0)
+        required: true
+        type: string
+      capnp_versions:
+        description: "Space-separated capnp versions to show (default: the build's own)"
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the documentation site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: swift:6.4.0-noble
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
+    steps:
+      - id: name
+        run: echo "artifact=github-pages-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+      - name: Refuse anything but a released tag, when run by hand
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          case "$TAG" in
+            *[!0-9A-Za-z.-]*|'') echo "::error::'$TAG' is not a version tag"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || inputs.ref }}
+      - run: apt-get update && apt-get install -y capnproto libcapnp-dev python3
+      - name: Build the site and its badge data
+        env:
+          VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || inputs.version }}
+          CAPNP_VERSIONS: ${{ inputs.capnp_versions }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/build-site.py --out _site --version "$VERSION"
+          versions=()
+          for v in $CAPNP_VERSIONS; do versions+=(--capnp-version "$v"); done
+          python3 ci/site-badges.py --out _site "${versions[@]+"${versions[@]}"}"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+          name: ${{ steps.name.outputs.artifact }}
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write      # deploy to GitHub Pages
+      id-token: write   # the Pages deployment's identity
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact }}
