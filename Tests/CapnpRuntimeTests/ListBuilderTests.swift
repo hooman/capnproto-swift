@@ -547,3 +547,41 @@ struct MessageTooLargeTests {
         #expect(error == .outOfSpace)
     }
 }
+
+// Answer key for #24, F2 (clean-room review), written before the fix. CapnpListBuilder is
+// public, so a hand-written conformance can declare one list shape and wrap the list in a
+// typed builder of another. Each typed builder must check the shape it is given: on a
+// mismatch it records .invalidLayout and writes nothing, as linkList already does for a
+// hand-written CapnpStructBuilder's sizes.
+private struct MismatchedList: ~Copyable, ~Escapable, CapnpListBuilder {
+    // A List(Void) shape, so no element storage is allocated...
+    static var _capnpListShape: ListShape { VoidListBuilder._capnpListShape }
+    // ...but written through eight-byte elements.
+    var inner: PrimitiveListBuilder<UInt64>
+    @_lifetime(copy list)
+    init(_ list: consuming ListBuilder) { inner = PrimitiveListBuilder(list) }
+}
+
+@Suite("Mismatched list shape")
+struct MismatchedListTests {
+    @Test func typedBuilderRefusesAnotherShape() {
+        var buffer = [UInt8](repeating: 0xAA, count: 64)
+        var error = BuildError.none
+        var framed = 0
+        do {
+            var span = buffer.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 0, pointerCount: 1)
+                var list = root.initList(MismatchedList.self, at: 0, count: 4)
+                for i in 0..<4 { list.inner.setElement(0x1111_2222_3333_4444, at: i) }
+            }
+            error = message.error
+            framed = message.framedBytes.byteCount
+        }
+        #expect(error == .invalidLayout)
+        #expect(framed == 0)
+        // Nothing past the 24 bytes of header, root pointer and list pointer was written.
+        #expect(buffer[24..<64].allSatisfy { $0 == 0xAA })
+    }
+}
