@@ -283,5 +283,26 @@ func verify32BitBuilders() -> Int {
         precondition(message.error == .listTooLong)
         checks += 1
     }
+
+    // 9. PR #24, B1, written before the fix: text of Int.max bytes is .listTooLong, not a trap
+    // adding its NUL. The span covers one real byte and is never read, since the count is
+    // rejected first. Only a 32-bit target can reach it: on 64-bit, UTF8Span's count is
+    // smaller than Int.max.
+    do {
+        var byte: UInt8 = 0
+        let error = unsafe withUnsafePointer(to: &byte) { pointer in
+            var storage = InlineArray<4, UInt64>(repeating: 0)
+            var span = storage.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 0, pointerCount: 1)
+                let huge = unsafe Span<UInt8>(_unsafeStart: pointer, count: Int.max)
+                root.setText(UTF8Span(unchecked: huge), at: 0)
+            }
+            return message.error
+        }
+        precondition(error == .listTooLong, "text of Int.max bytes")
+        checks += 1
+    }
     return checks
 }
