@@ -27,6 +27,12 @@ public enum BuildError: UInt8 {
     /// A field offset or pointer index outside the struct, or a size outside 0...65535.
     /// Generated code never does this.
     case invalidLayout
+    /// The message needs more storage than any builder can use, so no retry can succeed:
+    /// 4 GiB on a 64-bit target and 268,435,448 bytes (256 MiB less 8) on a 32-bit one
+    /// (`builderCapacity`). It replaces an earlier ``outOfSpace``.
+    /// ``MessageBuilder/requiredByteCount`` still counts the bytes needed, saturating at
+    /// `Int.max`.
+    case messageTooLarge
 }
 
 /// Deepest struct a builder creates; matches `ReaderOptions.defaultNestingLimit`.
