@@ -505,3 +505,45 @@ extension ListBuilderTests {
         #expect(retry.framed.count == 64)
     }
 }
+
+// Answer key for #24, F4 (clean-room review), written before the fix: a build that needs more
+// than the most storage a builder can use (4 GiB on 64-bit) is .messageTooLarge, and that
+// replaces an earlier .outOfSpace, since no retry can succeed. A build under the cap stays
+// .outOfSpace, with requiredByteCount the exact size to retry with.
+@Suite("Message too large")
+struct MessageTooLargeTests {
+    @Test func overTheCapReplacesOutOfSpace() {
+        var buffer = [UInt8](repeating: 0, count: 48)
+        var error = BuildError.none
+        var required = 0
+        do {
+            var span = buffer.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 0, pointerCount: 2)
+                // Out of space first: 38 bytes of text do not fit in what is left of 48.
+                root.setText("this text does not fit in what is left".utf8Span, at: 0)
+                _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 1, count: (1 << 29) - 1)
+            }
+            error = message.error
+            required = message.requiredByteCount
+        }
+        #expect(error == .messageTooLarge)
+        #expect(required > 1 << 32)
+    }
+
+    @Test func underTheCapStaysOutOfSpace() {
+        var buffer = [UInt8](repeating: 0, count: 48)
+        var error = BuildError.none
+        do {
+            var span = buffer.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 0, pointerCount: 1)
+                _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 0, count: 1000)
+            }
+            error = message.error
+        }
+        #expect(error == .outOfSpace)
+    }
+}
