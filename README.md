@@ -1,14 +1,14 @@
 # capnproto-swift
 
-Native Swift readers for [Cap’n Proto](https://capnproto.org): a host code generator and
-an allocation-free runtime that also builds for Embedded Swift. Requires Swift 6.4 or
+Native Swift readers and builders for [Cap’n Proto](https://capnproto.org): a host code
+generator and an allocation-free runtime that also builds for Embedded Swift. Requires Swift 6.4 or
 later and, on Apple platforms, OS 27; there is no back-deployment, because the package
-tracks current Swift systems-programming features. The current release is `0.3.0`
-(readers only); see [CHANGELOG.md](CHANGELOG.md).
+tracks current Swift systems-programming features. The current release is `0.4.0`,
+the first with builders; see [CHANGELOG.md](CHANGELOG.md).
 
 New to Cap'n Proto, or coming from Protocol Buffers? The DocC documentation has a **Why
-Cap'n Proto** article and a **Getting Started** tutorial, including what changes on an
-Embedded target. Build it with `swift package generate-documentation` or Xcode's
+Cap'n Proto** article, a **Getting Started** tutorial, including what changes on an
+Embedded target, and a **Building messages** article. Build it with `swift package generate-documentation` or Xcode's
 Product ▸ Build Documentation.
 
 ## Status at a glance
@@ -18,15 +18,15 @@ Product ▸ Build Documentation.
 | Reading messages — structs, lists, unions, groups, text/data, schema evolution, unpacked and packed framing | ✅ Implemented, conformance-tested against the C++ reference implementation |
 | Code generation — `capnpc-swift` plugin binary and the SwiftPM build-tool plugin | ✅ Implemented and verified from a separate consumer package |
 | Embedded Swift / allocation-free runtime | ✅ `-no-allocations` compile, allocator-symbol audit and negative control; zero `unsafe` expressions under strict memory safety |
-| macOS and Linux (glibc) hosts | ✅ In CI: 88 runtime tests (97.4% line coverage), C++ oracle conformance for readers and builders, 38 compile-fail fixtures, output-boundary hardening |
-| ARMv7E-M bare metal (Cortex-M4) | 🟡 Links against `ci/firmware/stubs.c` only (`13,082 B` flash on 6.4.2, readers and builders), and a full reader and builder image runs under QEMU with host-identical results. Firmware on a Cortex-M4F or M7 must enable the FPU first. Not yet run on hardware |
-| RISC-V 32-bit bare metal (`rv32imac`, ESP32-C6) | 🟡 Links against `ci/firmware/stubs.c` only (`17,402 B` flash on 6.4.2, readers and builders), and a full reader and builder image runs under QEMU with host-identical results. Not yet run on hardware |
+| macOS and Linux (glibc) hosts | ✅ In CI: 96 runtime tests (97.5% line coverage), C++ oracle conformance for readers and builders, 38 compile-fail fixtures, output-boundary hardening |
+| ARMv7E-M bare metal (Cortex-M4) | 🟡 Links against `ci/firmware/stubs.c` only (`13,610 B` flash on 6.4.2, readers and builders), and a full reader and builder image runs under QEMU with host-identical results. Firmware on a Cortex-M4F or M7 must enable the FPU first. Not yet run on hardware |
+| RISC-V 32-bit bare metal (`rv32imac`, ESP32-C6) | 🟡 Links against `ci/firmware/stubs.c` only (`18,004 B` flash on 6.4.2, readers and builders), and a full reader and builder image runs under QEMU with host-identical results. Not yet run on hardware |
 | WebAssembly / WASI | ✅ Full and Embedded Swift run every oracle message (aligned, unaligned and packed) and the 32-bit edge checks under WasmKit |
 | Static Linux (musl) | 🟡 Verified locally on 6.4.2 (`aarch64` native, `x86_64` under Rosetta); not yet on native `x86_64` hardware |
 | Embedded builds with full debug info (`-g`) | 🟡 Swift 6.4.0–6.4.2 need `-gline-tables-only`; fixed on `main` (see *Embedded debug info*) |
 | Writing messages (builders) | 🟡 On `main`, unreleased: generated builders for every field type readers support, rebuilding all 9 C++ oracle messages byte-equivalently (see *Build a message*). Not yet released or run on hardware |
 | RPC / capabilities | ⬜ Out of scope |
-| Tagged release | ✅ `0.3.0`, see [CHANGELOG.md](CHANGELOG.md) |
+| Tagged release | ✅ `0.4.0`, see [CHANGELOG.md](CHANGELOG.md) |
 
 ✅ verified, with evidence in CI or below &nbsp;·&nbsp; 🟡 partly verified, gap named
 &nbsp;·&nbsp; ⬜ not done. *Supported scope* and *Platform evidence* below give the detail
@@ -41,7 +41,7 @@ compatibility, so pin to the minor version:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/hooman/capnproto-swift", .upToNextMinor(from: "0.3.0"))
+    .package(url: "https://github.com/hooman/capnproto-swift", .upToNextMinor(from: "0.4.0"))
 ]
 ```
 
@@ -123,7 +123,7 @@ schema defaults without an error. Malformed pointers, invalid UTF-8/text termina
 type mismatches, invalid list indexes, and exhausted budgets return empty/default
 values and set the error. Check it **after traversal** before accepting results.
 Unvisited fields are not eagerly validated. Capability pointers dereference as empty
-without an error in v1; `PointerReader.isNull` still tests the literal wire null.
+without an error (this runtime has no RPC); `PointerReader.isNull` still tests the literal wire null.
 
 `ReaderOptions` defaults to an 8,388,608-word (64 MiB) traversal budget, nesting depth 64,
 and 512 segments. Repeated pointer reads, including through copied views, consume
@@ -181,7 +181,7 @@ Float constants are written by bit pattern, so NaN, infinities and `-0.0` are ex
 
 ## Build a message
 
-*Unreleased, on `main`: v2 builders (D-18), covering every field type readers support:
+*Since `0.4.0`: builders, covering every field type readers support:
 structs, scalars, enums, groups, unions, text, data and lists.*
 
 `capnpc-swift` generates a builder beside each reader: `struct Example` gives
@@ -228,11 +228,13 @@ func buildExample() -> UInt64? {
   while the child is alive. Build children one after another.
 - **Sticky errors that never trap.** The first failure is kept in `message.error`, and later
   writes are no-ops. `.outOfSpace` comes with `requiredByteCount`, the exact size to retry
-  with when the same build steps run again. `.nestingLimit` refuses a struct more than 64
-  levels deep, the default reader's limit (a list costs a level, as in the reader).
+  with when the same build steps run again. A message uses at most 4 GiB of storage (one
+  segment), or 268,435,448 bytes on a 32-bit target; a build that needs more ends in
+  `.messageTooLarge`, which no retry can fix. `.nestingLimit` refuses an object more than
+  64 levels deep, the default reader's limit (a list costs a level, as in the reader).
   `.listTooLong` refuses more than 2^29 − 1 elements. `.invalidLayout` reports an
-  out-of-range field, element or size. A message uses at most 4 GiB of storage (one
-  segment); a build that needs more ends in `.outOfSpace`.
+  out-of-range field, element, count or size, or a list builder given a list of another
+  shape.
 - **Wire rules.** Scalars are stored XOR their schema default. Allocated space is zeroed,
   and storage needn't be aligned or zeroed. Setting a union member zeroes every member's
   storage first, so no inactive member's bits or subtree survive. Re-initializing or
@@ -333,12 +335,12 @@ reference generated from doc comments.
 
 | Target | Verified with Swift 6.4.0 / 6.4.2 (and `main-2026-11-01` locally) | Remaining validation |
 |---|---|---|
-| macOS host | 88 runtime tests (97.4% line coverage on 6.4.2), generator + output-boundary hardening, C++ fixtures (readers, and builders in reverse), 38 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
+| macOS host | 96 runtime tests (97.5% line coverage on 6.4.2), generator + output-boundary hardening, C++ fixtures (readers, and builders in reverse), 38 compile-fail fixtures, Embedded object checks | iOS/watchOS/tvOS/visionOS device execution |
 | Linux x86-64 (glibc) | Host execution, strict `swift format` lint, and Embedded object checks in CI | Additional architectures and distributions |
-| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`13,082 B` flash / `24,764 B` ELF on 6.4.2; `12,403 B` flash / `21,712 B` ELF on `main-2026-11-01`, including the packed unpacker and the builders; without the builders `7,006 B` / `6,451 B`, and without either `5,358 B` / `4,955 B`; with PAL `_swift_deallocate` negative-control rejection, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, Cortex-M4 on `mps2-an386`, in CI): a `-no-allocations` image of the runtime, generated readers, the builders, generated builders and shared assertions (`27,816 B` flash on 6.4.2, `28,585 B` on `main-2026-11-01`; peak stack `3,780 B` reading unpacked messages, `12,072 B` with the driver's 8 KiB packed-output buffer on the stack) runs the same inputs and 32-bit suites (edge, packed, builder, generated builder) as Wasm with host-identical checksums, and two negative controls trap to the fault handler. The runtime and generated readers use VFP registers, so the startup enables the Cortex-M4F FPU; without it the first `Float` read faults (NOCP) | Physical hardware execution; cores without an FPU (Cortex-M3, M4 without F) |
-| RISC-V 32-bit bare metal (`rv32imac`) | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`17,402 B` flash / `36,004 B` ELF on 6.4.2; `16,137 B` flash / `44,384 B` ELF on `main-2026-11-01`, including the packed unpacker and the builders; `8,836 B` / `8,239 B` flash without the builders, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, `rv32imac` on `virt`, in CI): the same image and inputs as ARMv7E-M (`34,158 B` flash on 6.4.2, `35,327 B` on `main-2026-11-01`; peak stack `3,908 B` unpacked, `12,164 B` packed) | Real hardware (e.g. ESP32-C6) execution |
+| ARMv7E-M bare metal | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`13,610 B` flash / `25,404 B` ELF on 6.4.2; `12,935 B` flash / `22,872 B` ELF on `main-2026-11-01`, including the packed unpacker and the builders; at `0.3.0`, before the builders, `7,006 B` / `6,451 B` flash, and without the unpacker too `5,358 B` / `4,955 B`; with PAL `_swift_deallocate` negative-control rejection, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, Cortex-M4 on `mps2-an386`, in CI): a `-no-allocations` image of the runtime, generated readers, the builders, generated builders and shared assertions (`28,488 B` flash on 6.4.2, `29,545 B` on `main-2026-11-01`; peak stack `12,080 B`, mostly the driver's 8 KiB packed-output buffer; `3,780 B` reading unpacked messages, measured at `0.3.0`) runs the same inputs and 32-bit suites (edge, packed, builder, generated builder) as Wasm with host-identical checksums, and two negative controls trap to the fault handler. The runtime and generated readers use VFP registers, so the startup enables the Cortex-M4F FPU; without it the first `Float` read faults (NOCP) | Physical hardware execution; cores without an FPU (Cortex-M3, M4 without F) |
+| RISC-V 32-bit bare metal (`rv32imac`) | Runtime and generated-reader compilation, symbol audit, and negative control; firmware image links against `ci/firmware/stubs.c` only (`18,004 B` flash / `36,396 B` ELF on 6.4.2; `16,751 B` flash / `46,128 B` ELF on `main-2026-11-01`, including the packed unpacker and the builders; `8,836 B` / `8,239 B` flash at `0.3.0`, before the builders, zero atomic stubs). **Executed under QEMU** (`ci/check-qemu.py`, `rv32imac` on `virt`, in CI): the same image and inputs as ARMv7E-M (`34,798 B` flash on 6.4.2, `36,543 B` on `main-2026-11-01`; peak stack `12,164 B`, and `3,908 B` unpacked at `0.3.0`) | Real hardware (e.g. ESP32-C6) execution |
 | Static Linux SDK (musl) | Verified locally with Swift 6.4.2 (`swift-6.4.2-RELEASE_static-linux-0.1.0`, musl 1.2.5): `aarch64` and `x86_64` statically linked ELF executables (`INTERP`/`DYNAMIC`/`NEEDED` absent) run all 9 C++ oracle messages + wrong-mode negative control in `FROM scratch` Linux containers (`aarch64` native arm64 Linux, `x86_64` Rosetta-emulated on Apple Silicon); SwiftPM `--swift-sdk` builds `CapnpRuntime` cleanly (SDK ships no `Testing` module). Full-Swift static binaries allocate; this is separate from `-no-allocations` | Native `x86_64` Linux hardware execution |
-| WebAssembly / WASI | Full and Embedded builds run all 9 aligned + 2 unaligned (`+1`/`+3` byte shifted) C++ oracle messages and the same 9 packed, plus 8 32-bit edge checks (single/double-far `Int32.max` overflow guards, `signedOffsetWords` overflow, `Atomic<UInt>` budget clamping, amplification, unaligned `UTF8Span`, malformed frame/UTF-8) and 5 packed ones (hostile segment tables past a 32-bit `Int`, amplification bounded by the output, a segment-crossing run), plus 8 builder checks (layouts, the out-of-space sweep with guard bytes, limits, lists past 2^29 elements on a 32-bit Int) and 3 generated-builder checks under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
+| WebAssembly / WASI | Full and Embedded builds run all 9 aligned + 2 unaligned (`+1`/`+3` byte shifted) C++ oracle messages and the same 9 packed, plus 8 32-bit edge checks (single/double-far `Int32.max` overflow guards, `signedOffsetWords` overflow, `Atomic<UInt>` budget clamping, amplification, unaligned `UTF8Span`, malformed frame/UTF-8) and 5 packed ones (hostile segment tables past a 32-bit `Int`, amplification bounded by the output, a segment-crossing run; the full build adds a sixth, a 2^31-word segment table in a size query), plus 9 builder checks (layouts, the out-of-space sweep with guard bytes, limits, lists past 2^29 elements on a 32-bit Int, `.messageTooLarge`, text of `Int.max` bytes) and 3 generated-builder checks under WasmKit (CI and local) and wasmtime (local) with host-identical results. Embedded allocation freedom by call-graph analysis with a negative control; `-no-allocations` itself is unusable on this SDK because its concurrency scaffolding allocates | Browser/JS hosts |
 
 Snapshot or vendor compilers reporting a newer Swift version are not automatically
 qualified by these results. Static linking, Embedded mode and allocation freedom are
