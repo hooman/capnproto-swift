@@ -111,6 +111,31 @@ for mode, typename, message in [(0, 'Example', b'()'), (1, 'Example', full),
         assert result.startswith('PASS packed ') and \
             result.split('checksum=')[1].split()[0] == unpacked.split('checksum=')[1].split()[0], result
         print(f'segments={segments}: ' + result, flush=True)
+        # Packed output: Packed.pack of the unpacked encoding is byte-identical to capnp's.
+        result = run([host / 'verify', '--pack', path, packed]).decode().strip()
+        assert result.startswith('PASS pack '), result
+        print(f'segments={segments}: ' + result, flush=True)
+
+# Packed output's edge rules, against the live encoder: a zero run past 256 words, a literal
+# (all-nonzero) run past 255 words that continues into a list, words with one and with two zero
+# bytes, and, with small segments, runs that meet segment boundaries. Expected bytes come from
+# `capnp encode --packed` itself, not from a hand-computed key.
+nonzero, one_zero, two_zeros = 0x0102030405060708, 0x0807060504030200, 0x0807060504030000
+mixed = [nonzero] * 3 + [one_zero, two_zeros, nonzero, one_zero, one_zero, 0, nonzero]
+edges = ('(zeros = [' + ', '.join(['0'] * 300) + '], literal = 0x"' + '11' * 2100 + '", '
+         'mixed = [' + ', '.join(str(v) for v in mixed) + '], tail = 1)').encode()
+for segment_size in [None, 1, 4, 64]:
+    command = [capnp, 'encode', fixture / 'packing.capnp', 'Packing']
+    if segment_size:
+        command += [f'--segment-size={segment_size}']
+    unpacked_path = work / f'packing-{segment_size}.bin'
+    packed_path = work / f'packing-{segment_size}.packed'
+    unpacked_path.write_bytes(run(command, data=edges))
+    packed_path.write_bytes(run(command + ['--packed'], data=edges))
+    result = run([host / 'verify', '--pack', unpacked_path, packed_path]).decode().strip()
+    assert result.startswith('PASS pack '), result
+    segments = struct.unpack_from('<I', unpacked_path.read_bytes())[0] + 1
+    print(f'packing edges, segments={segments}: ' + result, flush=True)
 
 if not args.skip_compile_fail:
     output = run([

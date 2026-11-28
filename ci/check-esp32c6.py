@@ -100,7 +100,7 @@ populated = [m for m in messages if m.name.startswith('message-1-')][0]
 for shift in (1, 3):
     add(1, f'PASS mode=1 shift={shift} checksum={expected_sum[populated]}', shift=shift,
         message=populated.read_bytes())
-for mode, checks in ((99, 9), (98, 5), (97, 9), (96, 3)):
+for mode, checks in ((99, 9), (98, 6), (97, 9), (96, 3)):
     add(mode, f'PASS mode={mode} checks={checks}')
 defaults = [m for m in messages if m.name.startswith('message-0-')][0]
 negative = bytes([1, 0, 0, 0]) + len(defaults.read_bytes()).to_bytes(4, 'little') + defaults.read_bytes()
@@ -177,7 +177,7 @@ peak = int(stack.group(1)) - int(stack.group(2))
 after = text[text.index('CAPNP NEGATIVE CONTROL'):]
 assert 'Guru Meditation' in after and 'DID NOT TRAP' not in after, 'the negative control did not trap'
 print(f'PASS esp32c6 on {port}: {len(messages)} aligned + 2 unaligned oracle messages, {len(messages)} packed, '
-      f'9 32-bit edge checks, 5 packed, 9 builder and 3 generated-builder; heap unchanged '
+      f'9 32-bit edge checks, 6 packed, 9 builder and 3 generated-builder; heap unchanged '
       f'({heap.group(1)} B free); main-task stack peak {peak} B (of {stack.group(1)}); '
       f'negative control traps; slowest input {max(times)} us, all {sum(times)} us', flush=True)
 for (_, pattern), us in zip(inputs, times):

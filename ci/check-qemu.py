@@ -161,7 +161,7 @@ for name in args.target or list(TARGETS):
         passes(1, rf'^PASS mode=1 shift={shift} checksum={expected[populated]}$',
                shift=shift, message=populated.read_bytes())
     passes(99, r'^PASS mode=99 checks=9$')
-    passes(98, r'^PASS mode=98 checks=5$')
+    passes(98, r'^PASS mode=98 checks=6$')
     passes(97, r'^PASS mode=97 checks=9$')
     passes(96, r'^PASS mode=96 checks=3$')
 
@@ -175,6 +175,6 @@ for name in args.target or list(TARGETS):
         assert status != 0 and 'FAULT' in output and 'PASS' not in output, \
             f'{name}: negative control "{label}" did not fail: exit {status}: {output!r}'
     print(f'PASS qemu {name} ({" ".join(target["qemu"][:3])}): {len(messages)} aligned + 2 unaligned '
-          f'oracle messages, {len(messages)} packed, 9 32-bit edge checks, 5 packed, 9 builder and 3 generated-builder; '
+          f'oracle messages, {len(messages)} packed, 9 32-bit edge checks, 6 packed, 9 builder and 3 generated-builder; '
           f'2 negative controls fault; flash={flash} B, max stack={stack} B', flush=True)
 print('QEMU CHECK: PASS', flush=True)

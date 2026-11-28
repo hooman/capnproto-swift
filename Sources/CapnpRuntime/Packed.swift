@@ -6,9 +6,10 @@
 // 32-bit wire values; every size is computed in UInt64 and checked before it becomes Int,
 // so 32-bit targets reject hostile tables instead of trapping.
 
-/// Decodes standard packed framing into storage the caller provides.
+/// Decodes and encodes standard packed framing, in storage the caller provides.
 ///
-/// Unpack one frame, then open it as an arena over the bytes written:
+/// To encode, ``pack(_:into:)`` packs one framed message, such as a builder's
+/// `framedBytes`. To decode, unpack one frame, then open it as an arena over the bytes written:
 ///
 /// ```swift
 /// var storage = InlineArray<512, UInt64>(repeating: 0)

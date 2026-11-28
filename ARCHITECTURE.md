@@ -40,6 +40,16 @@ first word, the rest of the table, and the body. The C++ writer never emits them
 widens what this reader tolerates. Words are assembled from two `UInt32` halves:
 a variable `UInt64` shift needs `__aeabi_llsl`, which the bare-metal link does not provide.
 
+`Packed.pack` is the inverse, and matches `PackedOutputStream` byte for byte, which
+`ci/check-readers.py` checks against `capnp encode --packed` for every oracle message and an
+edge-case message (`ci/fixtures/packing.capnp`). Because the C++ writer packs the table and
+each segment as separate pieces, the packer parses the frame's own table and packs piece by
+piece, so its runs restart where the C++ runs do. An empty segment writes nothing. One walker,
+`PackWriter`, serves both `pack` and the size query `packedFrameByteCount`. The table is
+validated in `UInt64` before any size becomes an `Int`, and output is written a byte at a time
+with a bounds check. Packed output is at most 10 bytes for every 8-byte word, so the count
+cannot overflow.
+
 `RawPointer` decodes the pointer word; `PointerReader` follows offsets and validates
 single/double-far landing pads, segment IDs, object sizes, and list tags. Every
 arithmetic conversion to an address follows range checks. Frame size is capped at

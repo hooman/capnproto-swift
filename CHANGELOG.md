@@ -10,6 +10,13 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+### Added
+
+- `Packed.pack(_:into:)` packs a framed message, such as a builder's `framedBytes`, into
+  caller storage, and `Packed.packedFrameByteCount(_:)` gives its size first. The output is
+  byte-identical to `capnp encode --packed`, which `check-readers.py` checks live. Like
+  unpacking, it never allocates and never traps.
+
 ### Fixed
 
 - A reader over memory another process can write no longer traps when that process rewrites
