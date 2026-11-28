@@ -42,8 +42,16 @@ gh run watch -R hooman/capnproto-swift "$(gh run list -R hooman/capnproto-swift 
 ```
 
 The jobs run in order: `validate`, `ci` (the whole `embedded-clean` workflow), `publish`
-(the tag, the release and its attestation) and `site` (GitHub Pages). If `site` fails, the
-release already exists: fix the cause on `main` if needed, then rerun only that job.
+(the tag, the release and its attestation) and `site` (GitHub Pages, via `site.yml`: a build
+job, then a deploy job). If `site` fails, the release already exists. Rerun the failed jobs, or
+publish the tag by hand, which works for any released tag:
+
+```sh
+gh workflow run site.yml -R hooman/capnproto-swift -f tag=X.Y.Z -f capnp_versions="1.0.1 1.5.0"
+```
+
+`capnp_versions` is optional. It names the `capnp` versions the badge shows; without it, the
+badge shows the version the build used.
 
 ## 4. Check it
 

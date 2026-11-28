@@ -108,38 +108,18 @@ jobs:
             "capnproto-swift-$VERSION.tar.gz.sha256"
 
   site:
-    # The documentation site at https://hooman.github.io/capnproto-swift/, rebuilt from the
-    # released commit: DocC behind the landing page (ci/build-site.py), plus the README's badge
-    # data (ci/site-badges.py). It runs after the release exists; if it fails, rerun this job.
-    name: Publish the documentation site
+    # The documentation site, rebuilt from the released commit (site.yml: build, then deploy).
+    # It runs after the release exists. If it fails, rerun it, or publish the tag by hand:
+    # gh workflow run site.yml -f tag=X.Y.Z (RELEASING.md).
+    name: Documentation site
     needs: [validate, ci, publish]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    container: swift:6.4.0-noble
     permissions:
       contents: read
       pages: write      # deploy to GitHub Pages
       id-token: write   # the Pages deployment's identity
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.validate.outputs.sha }}
-      - run: apt-get update && apt-get install -y capnproto libcapnp-dev python3
-      - name: Build the site
-        env:
-          VERSION: ${{ inputs.version }}
-          # The capnp versions the release's CI gates tested against (Linux apt, macOS Homebrew).
-          CAPNP_LINUX: ${{ needs.ci.outputs.capnp_linux }}
-          CAPNP_MACOS: ${{ needs.ci.outputs.capnp_macos }}
-        run: |
-          python3 ci/build-site.py --out _site --version "$VERSION"
-          python3 ci/site-badges.py --out _site --capnp-version "$CAPNP_LINUX" --capnp-version "$CAPNP_MACOS"
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: _site
-      - id: deploy
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+    uses: ./.github/workflows/site.yml
+    with:
+      ref: ${{ needs.validate.outputs.sha }}
+      version: ${{ inputs.version }}
+      # The capnp versions the release's CI gates tested against (Linux apt, macOS Homebrew).
+      capnp_versions: ${{ needs.ci.outputs.capnp_linux }} ${{ needs.ci.outputs.capnp_macos }}
