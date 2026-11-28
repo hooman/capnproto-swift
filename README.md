@@ -1,15 +1,25 @@
 # capnproto-swift
 
+[![CI](https://github.com/hooman/capnproto-swift/actions/workflows/embedded-clean.yml/badge.svg?branch=main)](https://github.com/hooman/capnproto-swift/actions/workflows/embedded-clean.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fhooman.github.io%2Fcapnproto-swift%2Fbadges%2Fcoverage.json)](https://hooman.github.io/capnproto-swift/badges/coverage.json)
+[![Cap'n Proto](https://img.shields.io/endpoint?url=https%3A%2F%2Fhooman.github.io%2Fcapnproto-swift%2Fbadges%2Fcapnp.json)](https://capnproto.org)
+[![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fhooman%2Fcapnproto-swift%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/hooman/capnproto-swift)
+[![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fhooman%2Fcapnproto-swift%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/hooman/capnproto-swift)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hooman/capnproto-swift/badge)](https://scorecard.dev/viewer/?uri=github.com/hooman/capnproto-swift)
+[![Release](https://img.shields.io/github/v/release/hooman/capnproto-swift)](https://github.com/hooman/capnproto-swift/releases)
+[![License](https://img.shields.io/github/license/hooman/capnproto-swift)](LICENSE)
+
 Native Swift readers and builders for [Cap’n Proto](https://capnproto.org): a host code
 generator and an allocation-free runtime that also builds for Embedded Swift. Requires Swift 6.4 or
 later and, on Apple platforms, OS 27; there is no back-deployment, because the package
 tracks current Swift systems-programming features. The current release is `0.4.0`,
 the first with builders; see [CHANGELOG.md](CHANGELOG.md).
 
-New to Cap'n Proto, or coming from Protocol Buffers? The DocC documentation has a **Why
-Cap'n Proto** article, a **Getting Started** tutorial, including what changes on an
-Embedded target, and a **Building messages** article. Build it with `swift package generate-documentation` or Xcode's
-Product ▸ Build Documentation.
+New to Cap'n Proto, or coming from Protocol Buffers? The
+[documentation](https://hooman.github.io/capnproto-swift/) has a **Why Cap'n Proto** article,
+a **Getting Started** tutorial, including what changes on an Embedded target, and a
+**Building messages** article. Build it locally with `swift package generate-documentation`
+or Xcode's Product ▸ Build Documentation.
 
 ## Status at a glance
 
@@ -317,6 +327,11 @@ replace execution on physical hardware. Formatting follows the committed `.swift
 (`swift format --in-place --recursive …`); CI lints it.
 
 ### Documentation
+
+The documentation for the latest release is at <https://hooman.github.io/capnproto-swift/>: the API reference, the articles
+and the tutorial, behind a landing page. Each release publishes it (`release.yml`'s `site`
+job, [RELEASING.md](RELEASING.md)), and every PR checks that it builds with no warnings
+(`ci/build-site.py`) and that the tutorial's code compiles and runs (`ci/check-tutorial.py`).
 
 The package depends on [`swift-docc-plugin`](https://github.com/swiftlang/swift-docc-plugin)
 (host tooling only — it never links into `CapnpRuntime` or `capnpc-swift`) so the DocC

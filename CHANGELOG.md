@@ -54,6 +54,11 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 - Documentation: a first full comment-review pass over the package. Public reader and builder
   members now document what an index out of range, a null pointer or an earlier failure
   gives, and DocC has a **Building messages** article. The tutorial depends on `0.4.0`.
+- Documentation is published to <https://hooman.github.io/capnproto-swift/> by each
+  release, behind a landing page, and every PR checks that it builds with no warnings and that
+  the tutorial's code runs. Releases also check that `capnpc-swift --version` and the docs were
+  updated (`RELEASING.md`). The README has CI, coverage, Cap'n Proto, Swift-version, platform,
+  security, release and license badges.
 
 ### Fixed
 

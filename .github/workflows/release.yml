@@ -3,7 +3,8 @@ name: release
 # Cut a release from the current `main`: validate the version and its CHANGELOG entry,
 # run the full CI gates on that exact commit, then create the tag and GitHub Release
 # together with a source archive and a Sigstore build-provenance attestation for it.
-# Release tags are immutable (tag ruleset); a bad release is fixed forward, not retagged.
+# The `site` job then publishes that commit's documentation to GitHub Pages. Release tags are
+# immutable (tag ruleset); a bad release is fixed forward, not retagged. Steps: RELEASING.md.
 #
 # Run: Actions ▸ release ▸ Run workflow ▸ version (e.g. 0.1.0), or
 #   gh workflow run release.yml -f version=0.1.0
@@ -46,6 +47,8 @@ jobs:
           fi
           grep -qE "^## \[$VERSION\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md \
             || { echo "::error::CHANGELOG.md has no '## [$VERSION] - YYYY-MM-DD' entry"; exit 1; }
+          # capnpc-swift --version, and docs updated since the previous tag (RELEASING.md).
+          ci/check-release.sh
           echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
 
   ci:
@@ -103,3 +106,37 @@ jobs:
             "${prerelease[@]}" \
             "capnproto-swift-$VERSION.tar.gz" \
             "capnproto-swift-$VERSION.tar.gz.sha256"
+
+  site:
+    # The documentation site at https://hooman.github.io/capnproto-swift/, rebuilt from the
+    # released commit: DocC behind the landing page (ci/build-site.py), plus the README's badge
+    # data (ci/site-badges.py). It runs after the release exists; if it fails, rerun this job.
+    name: Publish the documentation site
+    needs: [validate, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: swift:6.4.0-noble
+    permissions:
+      contents: read
+      pages: write      # deploy to GitHub Pages
+      id-token: write   # the Pages deployment's identity
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+      - run: apt-get update && apt-get install -y capnproto libcapnp-dev python3
+      - name: Build the site
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 ci/build-site.py --out _site --version "$VERSION"
+          python3 ci/site-badges.py --out _site
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

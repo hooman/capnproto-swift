@@ -136,6 +136,26 @@ jobs:
           apt-get install -y qemu-system-arm qemu-system-misc
           python3 ci/check-qemu.py --swiftc /usr/bin/swiftc --readers-work /tmp/readers
 
+  docs:
+    name: "Docs (Swift ${{ matrix.swift }})"
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: swift:${{ matrix.swift }}-noble
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.4.0"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: apt-get update && apt-get install -y capnproto libcapnp-dev python3
+      - name: Documentation site (DocC with warnings as errors; every landing-page link resolves)
+        run: python3 ci/build-site.py --out /tmp/site
+      - name: The DocC tutorial builds and runs against this checkout
+        run: python3 ci/check-tutorial.py --work /tmp/tutorial
+      - name: Badge data (coverage, capnp version), as the release publishes it
+        run: python3 ci/site-badges.py --out /tmp/site
+
   main-snapshot:
     name: "Linux (Swift main snapshot, informational)"
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.workflow == 'embedded-clean'
