@@ -10,6 +10,14 @@ Releases are cut by the `release` workflow, which requires an entry here headed
 
 ## [Unreleased]
 
+### Fixed
+
+- A reader over memory another process can write no longer traps when that process rewrites
+  the frame's segment table during the read: the lookup reads as `.invalidPointer`. Segment
+  lookups read the table live, and now check every segment against the buffer, in 64-bit
+  arithmetic on 32-bit targets too. `Arena(framedBytes:)` documents what shared memory still
+  requires.
+
 ## [0.4.0] - 2026-11-28
 
 The first release with builders: generated builders write every field type readers support

@@ -57,6 +57,13 @@ public struct Arena: ~Copyable, ~Escapable, ~Sendable {
 
     /// Open one standard, unpacked frame. Trailing bytes belong to the next message.
     /// Check error before traversal and again after withRoot returns.
+    ///
+    /// - Important: In memory another process can write, such as a shared-memory region, a
+    ///   reader never reads outside `framedBytes`, even if the peer rewrites the frame while you
+    ///   read: a rewritten segment table reads as `.invalidPointer`. But any concurrent change
+    ///   is a data race, and text already validated as UTF-8 can be rewritten into invalid UTF-8.
+    ///   Read shared memory only when the writer never changes a message after handing it over,
+    ///   or when the system makes it immutable (on Linux, a sealed `memfd`).
     @_lifetime(copy framedBytes)
     public init(framedBytes: RawSpan, options: ReaderOptions = ReaderOptions()) {
         bytes = framedBytes

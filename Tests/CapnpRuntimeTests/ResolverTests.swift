@@ -61,6 +61,25 @@ struct ResolverTests {
         }
     }
 
+    // Answer key for the live-segment-table fix, written before it: a frame in memory another
+    // process can write (shared memory) may have its segment table rewritten after
+    // Arena(framedBytes:) parsed it. Segment lookups read the table live, so the reader must
+    // then fail soft (.invalidPointer), not trap reading past the buffer. Found by the
+    // 2026-11-28 shared-memory probe.
+    @Test func segmentTableRewrittenAfterParse() {
+        let bytes = frame([[farWord(1)], [structWord(data: 1), 0x1234]])
+        let buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: bytes.count, alignment: 8)
+        defer { buffer.deallocate() }
+        buffer.copyBytes(from: bytes)
+        let arena = Arena(framedBytes: RawSpan(_unsafeBytes: UnsafeRawBufferPointer(buffer)))
+        #expect(arena.error == .none)
+        // The peer: segment 0 is now 0x0FFFFFFF words long, so segment 1 "starts" 2 GiB away.
+        buffer.storeBytes(of: UInt32(0x0FFF_FFFF).littleEndian, toByteOffset: 4, as: UInt32.self)
+        let value = arena.withRoot { $0.data(at: 0, default: UInt64(7)) }
+        #expect(value == 7)
+        #expect(arena.error == .invalidPointer)
+    }
+
     @Test func backwardPointer() {
         frame([[structWord(1, pointers: 1), 123, structWord(-2, data: 1)]])
             .withUnsafeBytes { bytes in
