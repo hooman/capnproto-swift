@@ -188,7 +188,28 @@ func verify32BitEdges() -> Int {
         precondition(arena.error == .invalidText, "invalid UTF-8 must fail on 32-bit")
     }
 
-    return 8
+    // 9. A segment table rewritten after Arena(framedBytes:) parsed it, as another process
+    // sharing the memory could do: segment 0 becomes 0xFFFFFFFF words, which does not fit a
+    // 32-bit Int. The lookup of segment 1 must fail soft, not trap converting or summing it.
+    do {
+        var frame = InlineArray<5, UInt64>(repeating: 0)
+        frame[0] = 1 | 1 << 32  // two segments; segment 0 is 1 word
+        frame[1] = 2  // segment 1 is 2 words
+        frame[2] = 2 | 1 << 32  // a far pointer to segment 1, word 0
+        frame[3] = 1 << 32  // landing pad: a struct of 1 data word, right after it
+        frame[4] = 0x1234
+        unsafe withUnsafeMutableBytes(of: &frame) { raw in
+            let arena = unsafe Arena(
+                framedBytes: RawSpan(_unsafeBytes: UnsafeRawBufferPointer(raw)))
+            precondition(arena.error == .none)
+            unsafe raw.storeBytes(of: UInt32.max, toByteOffset: 4, as: UInt32.self)
+            let value = arena.withRoot { $0.data(at: 0, default: UInt64(7)) }
+            let error = arena.error  // read first: precondition's autoclosure cannot capture it
+            precondition(value == 7 && error == .invalidPointer, "rewritten table must fail soft")
+        }
+    }
+
+    return 9
 }
 
 /// Whether both packed entry points reject `packed`, the unpack into a 512-byte output.
