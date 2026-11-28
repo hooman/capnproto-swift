@@ -25,6 +25,12 @@ on:
   workflow_dispatch:
   # Called by release.yml so a release runs exactly these gates on the commit it tags.
   workflow_call:
+    outputs:
+      # The capnp each job tested against, for the release's Cap'n Proto badge.
+      capnp_macos:
+        value: ${{ jobs.macos.outputs.capnp }}
+      capnp_linux:
+        value: ${{ jobs.linux.outputs.capnp }}
 
 permissions:
   contents: read
@@ -42,6 +48,8 @@ jobs:
     # Preview image with Xcode 27 and the macOS 27 SDK; OS-27 test binaries need it.
     runs-on: xcode-27
     timeout-minutes: 30
+    outputs:
+      capnp: ${{ steps.capnp.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +87,8 @@ jobs:
           python3 ci/check-readers.py --swiftc "$(command -v swiftc)" --plugin .build/debug/capnpc-swift --work /tmp/readers --skip-compile-fail
           python3 ci/check-compile-fail.py --swiftc "$(command -v swiftc)" --mode contract --runtime-module-dir /tmp/readers/host --generated /tmp/readers/readers.capnp.swift --work /tmp/readers/compile-fail
           python3 ci/check-cross.py --swiftc "$(command -v swiftc)" --target armv7em-none-none-eabi --generated /tmp/readers/readers.capnp.swift
+      - id: capnp
+        run: echo "version=$(capnp --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
 
       - name: "Embedded debug info (-gline-tables-only required; -g known upstream crash) and armv7em link"
         run: |
@@ -93,6 +103,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container: swift:${{ matrix.swift }}-noble
+    outputs:
+      capnp: ${{ steps.capnp.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -102,6 +114,8 @@ jobs:
       - name: Formatting (swift format against the committed .swift-format)
         run: swift format lint --strict --parallel --recursive Package.swift Sources Tests Plugins ci
       - run: apt-get update && apt-get install -y capnproto libcapnp-dev python3
+      - id: capnp
+        run: echo "version=$(capnp --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
       - run: swift test
       - run: swift test -c release
       - run: SWIFTC=/usr/bin/swiftc TARGET=x86_64-unknown-linux-gnu bash ci/check-embedded-clean.sh
