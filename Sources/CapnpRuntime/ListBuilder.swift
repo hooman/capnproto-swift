@@ -288,12 +288,13 @@ extension StructBuilder {
 // MARK: - Wire writing
 
 extension BuildState {
-    /// Count and reserve `words` words; a byte size that overflows `Int` is out of space.
+    /// Count and reserve `words` words; a byte size that overflows `Int` is too large for
+    /// any storage.
     mutating func allocate(words: Int) -> Int? {
         let (bytes, overflow) = words.multipliedReportingOverflow(by: 8)
         guard !overflow else {
             required = Int.max
-            fail(.outOfSpace)
+            failTooLarge()
             return nil
         }
         return allocate(bytes: bytes)
