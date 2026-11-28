@@ -245,10 +245,11 @@ struct ListBuilderTests {
             _ = root.initList(StructListBuilder<NodeBuilder>.self, at: 0, count: 1 << 28)
         }
         #expect(large.error == .outOfSpace)
+        // (2^29 - 1) eight-byte elements need more than the 4 GiB a builder can use (#24, F4).
         let huge = build { root in
             _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 0, count: (1 << 29) - 1)
         }
-        #expect(huge.error == .outOfSpace)
+        #expect(huge.error == .messageTooLarge)
         let negative = build { root in
             _ = root.initList(PrimitiveListBuilder<UInt8>.self, at: 0, count: -1)
         }

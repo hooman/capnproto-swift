@@ -270,7 +270,8 @@ func verify32BitBuilders() -> Int {
             var root = message.initRoot(dataWords: 0, pointerCount: 1)
             _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 0, count: (1 << 29) - 1)
         }
-        precondition(message.error == .outOfSpace)
+        // More than a 32-bit builder can ever use (about 256 MiB): no retry can succeed (#24, F4).
+        precondition(message.error == .messageTooLarge)
     }
     do {
         var storage = InlineArray<4, UInt64>(repeating: 0)
