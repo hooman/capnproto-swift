@@ -154,7 +154,7 @@ for name, flags in variants.items():
         # 32-bit packed suite: hostile segment tables, amplification, a segment-crossing run.
         packed_out = run([*command, wasm], data=bytes([98, 0]) + bytes(6))
         # The 2 MiB hostile table (R1) needs a heap array, so only the full variant runs it.
-        packed_checks = 6 if name == 'full' else 5
+        packed_checks = 7 if name == 'full' else 6
         assert re.search(rf'PASS mode=98 checks={packed_checks}\b', packed_out), f'{name}/{runner}/mode=98: {packed_out!r}'
         # 32-bit builder suite (D-18): layouts, out-of-space sweep with guard bytes, limits.
         build_out = run([*command, wasm], data=bytes([97, 0]) + bytes(6))

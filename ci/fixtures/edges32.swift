@@ -299,7 +299,59 @@ func verify32BitPacked() -> Int {
     precondition(crossing?.consumed == 7 && crossing?.written == 32, "segment-crossing run")
     precondition(storage[2] == 0 && storage[3] == 0 && storage[4] == 0xA5A5)
 
-    // 6. PR #24, R1, written before the fix. With segmentLimit raised to UInt32.max a frame
+    // 6. PR #29: packing on 32-bit. A zero run past 256 words, a literal run, the size query, an
+    // unpack round trip, and hostile tables, which must be rejected without trapping: the
+    // packer validates the table in UInt64 before any size becomes a 32-bit Int.
+    do {
+        // One segment of 260 zero words (hex words: a `1 << 32` shift allocates here).
+        var zeros = InlineArray<261, UInt64>(repeating: 0)
+        zeros[0] = 0x104_0000_0000  // count - 1 = 0, segment 0 = 260 words
+        var out = InlineArray<16, UInt8>(repeating: 0xEE)
+        let packed: (consumed: Int, written: Int)?
+        do {
+            var span = out.mutableSpan
+            var output = span.mutableBytes
+            packed = Packed.pack(zeros.span.bytes, into: &output)
+        }
+        precondition(packed?.consumed == 2088 && packed?.written == 7, "zero run")
+        precondition(Packed.packedFrameByteCount(zeros.span.bytes) == 7, "zero-run size")
+        // The table packs to 30 04 01; the segment to 00 FF (256 words), then 00 03 (4 words).
+        precondition(out[0] == 0x30 && out[1] == 0x04 && out[2] == 0x01 && out[3] == 0x00)
+        precondition(out[4] == 0xFF && out[5] == 0x00 && out[6] == 0x03 && out[7] == 0xEE)
+        var back = InlineArray<264, UInt64>(repeating: 0xA5A5)
+        let unpacked: (consumed: Int, written: Int)?
+        do {
+            var span = back.mutableSpan
+            var output = span.mutableBytes
+            unpacked = Packed.unpackFrame(out.span.bytes.extracting(0..<7), into: &output)
+        }
+        precondition(unpacked?.consumed == 7 && unpacked?.written == 2088, "zero-run round trip")
+        precondition(back[0] == zeros[0] && back[1] == 0 && back[260] == 0 && back[261] == 0xA5A5)
+    }
+    do {
+        // Three all-nonzero words: FF, the first word, a count of 2, then two words verbatim.
+        var literal = InlineArray<4, UInt64>(repeating: 0x0807_0605_0403_0201)
+        literal[0] = 0x3_0000_0000  // one segment of 3 words
+        var out = InlineArray<32, UInt8>(repeating: 0xEE)
+        let packed: (consumed: Int, written: Int)?
+        do {
+            var span = out.mutableSpan
+            var output = span.mutableBytes
+            packed = Packed.pack(literal.span.bytes, into: &output)
+        }
+        precondition(packed?.written == 28 && out[0] == 0x10 && out[1] == 0x03 && out[2] == 0xFF)
+        precondition(out[11] == 0x02 && out[12] == 0x01 && out[27] == 0x08 && out[28] == 0xEE)
+    }
+    do {
+        // Segment 0 declares 0xFFFFFFFF words; then the count - 1 is 0xFFFFFFFF (2^32 segments).
+        var hostile = InlineArray<2, UInt64>(repeating: 0)
+        hostile[0] = 0xFFFF_FFFF_0000_0000
+        precondition(Packed.packedFrameByteCount(hostile.span.bytes) == nil, "2^32 - 1 words")
+        hostile[0] = 0x0000_0000_FFFF_FFFF
+        precondition(Packed.packedFrameByteCount(hostile.span.bytes) == nil, "2^32 segments")
+    }
+
+    // 7. PR #24, R1, written before the fix. With segmentLimit raised to UInt32.max a frame
     // may declare 2^32 - 1 segments: a 2^31-word table. The size query must reject it, not
     // overflow a 32-bit Int counting table words: 2 MiB of zero runs expand to the 2^28 words
     // that pass Int.max bytes. Full Swift only: the input needs a heap array, larger than the
@@ -318,8 +370,8 @@ func verify32BitPacked() -> Int {
             let size = Packed.unpackedFrameByteCount(table.span.bytes, options: unlimited)
             precondition(size == nil, "a 2^31-word table must be rejected without overflow")
         }
-        return 6
+        return 7
     #else
-        return 5
+        return 6
     #endif
 }
