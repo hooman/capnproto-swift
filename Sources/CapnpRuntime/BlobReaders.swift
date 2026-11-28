@@ -20,8 +20,10 @@ public struct DataReader: ~Escapable, ~Sendable, Iterable, CapnpListElement {
         borrow { return _bytes }
     }
 
+    /// The number of bytes.
     public var count: Int { _bytes.count }
 
+    /// Byte `index`, or 0 if out of range, which records `.invalidIndex`.
     public subscript(index: Int) -> UInt8 {
         guard index >= 0, index < _bytes.count else {
             context.report(.invalidIndex)
@@ -74,8 +76,10 @@ public struct TextReader: ~Escapable, ~Sendable, Iterable, CapnpListElement {
         get { _utf8.span }
     }
 
+    /// The number of UTF-8 code units, without the NUL terminator.
     public var count: Int { _utf8.count }
 
+    /// Byte `index`, or 0 if out of range, which records `.invalidIndex`.
     public subscript(index: Int) -> UInt8 {
         guard index >= 0, index < _utf8.count else {
             context.report(.invalidIndex)

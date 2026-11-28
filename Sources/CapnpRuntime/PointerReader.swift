@@ -48,7 +48,8 @@ public struct PointerReader: ~Escapable, ~Sendable {
             return nil
         }
         var pointer = context.word(at: pointerByte)
-        // Capabilities deliberately behave as empty in readers-only v1; there is no RPC table.
+        // Capabilities deliberately behave as empty: this runtime has no RPC, so there is no
+        // capability table to resolve them against.
         if pointer.isNull || pointer.kind == .other { return nil }
         guard nestingLimit > 0 else {
             context.report(.nestingLimit)
@@ -116,7 +117,7 @@ public struct PointerReader: ~Escapable, ~Sendable {
     @_lifetime(copy self)
     public func structure() -> StructReader { structure(default: nil) }
 
-    /// Open a struct with a schema default pointer; only a null default is supported in v1.
+    /// Open a struct with a schema default pointer; only a null default is supported today.
     @_lifetime(copy self)
     func structure(default defaultPointer: RawPointer?) -> StructReader {
         let empty = StructReader(context: context)
@@ -147,6 +148,11 @@ public struct PointerReader: ~Escapable, ~Sendable {
             nestingLimit: nestingLimit - 1)
     }
 
+    /// Open a list whose elements are read as `expected`. A null pointer reads as an empty list
+    /// with no error. A list whose wire encoding cannot be read as `expected` (a bit list as
+    /// structs, say) records `.typeMismatch` and reads as empty; one that a schema upgrade
+    /// allows (a struct list read as scalars, which reads each element's first field) opens
+    /// with its wire stride kept.
     @_lifetime(copy self)
     public func list(of expected: ElementSize) -> ListReader {
         let empty = ListReader(context: context)
@@ -197,7 +203,8 @@ public struct PointerReader: ~Escapable, ~Sendable {
             }
         }
         // Schema evolution may expose a smaller data/pointer prefix of each element.
-        // Preserve the wire stride; packed bits cannot be reinterpreted as struct elements.
+        // Preserve the wire stride. A bit list cannot be read as any other element type, nor
+        // any other list as bits (encoding.md, "Lists": no upgrade to or from List(Bool)).
         guard encoding != .bit || expected == .bit,
             expected != .bit || encoding != .inlineComposite,
             expected.dataBits <= dataBits,
@@ -217,6 +224,8 @@ public struct PointerReader: ~Escapable, ~Sendable {
             nestingLimit: nestingLimit - 1)
     }
 
+    /// Open a Data field. A null pointer reads as empty data with no error; anything but a
+    /// byte list records `.typeMismatch` and reads as empty.
     @_lifetime(copy self)
     public func data() -> DataReader {
         let list = list(of: .byte)
@@ -227,6 +236,9 @@ public struct PointerReader: ~Escapable, ~Sendable {
         return DataReader(context: context, start: list.startByte, count: list.count)
     }
 
+    /// Open a Text field. A null pointer reads as empty text with no error. Anything but a
+    /// byte list ending in its NUL terminator, and invalid UTF-8, records `.invalidText` and
+    /// reads as empty.
     @_lifetime(copy self)
     public func text() -> TextReader {
         let list = list(of: .byte)

@@ -7,7 +7,7 @@ import Synchronization
 
 struct ReadState: ~Copyable, ~Sendable {
     // Word-sized atomic: 64-bit on 64-bit targets, 32-bit on 32-bit targets (UInt32.max
-    // words = 32 GiB, 512x the 64 MiB default and 128x the 32-bit address space). Enables
+    // words = 32 GiB, 512x the 64 MiB default and 8x the 32-bit address space). Enables
     // riscv32 (ESP32-C6) where UInt64 is not AtomicRepresentable, and uses native 32-bit
     // atomics on Cortex-M4 (armv7em) without software __atomic_*_8 helpers.
     let remaining: Atomic<UInt>
@@ -69,6 +69,8 @@ public struct Arena: ~Copyable, ~Escapable, ~Sendable {
     }
 
     /// Open a single unframed segment (for canonical messages and caller-managed framing).
+    /// `segmentID` is the id this segment answers to: pointers resolve within it, and far
+    /// pointers to any other id fail `.invalidPointer`.
     @_lifetime(copy bytes)
     public init(
         bytes: RawSpan,
@@ -86,6 +88,8 @@ public struct Arena: ~Copyable, ~Escapable, ~Sendable {
 
     /// First failure since initialization; fallback values alone do not imply success.
     public var error: ReadError {
+        // Only ReadError raw values are ever stored, so the fallback cannot happen; if it did,
+        // reporting a malformed pointer is the conservative answer.
         ReadError(rawValue: state.failure.load(ordering: .relaxed)) ?? .invalidPointer
     }
 

@@ -4,6 +4,8 @@ public struct ReaderOptions {
     public var traversalLimitWords: UInt64
     /// Per-path logical depth; negative values are clamped to zero at initialization.
     public var nestingLimit: Int
+    /// Most segments a frame may declare (default 512). It bounds framing work: every segment
+    /// lookup sums the size table up to that segment.
     public var segmentLimit: UInt32
 
     // Policy defaults, not wire limits. Traversal bounds repeated work and nesting

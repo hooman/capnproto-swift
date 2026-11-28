@@ -1,5 +1,7 @@
-// Swift 6.2/6.3 generic integer widening instantiates an allocating Words
-// collection on 32-bit targets, even when optimization would remove it later.
+// Generic integer widening instantiates an allocating Words collection on 32-bit
+// targets, even when optimization would remove it later [Swift 6.2 to 6.4.2 and the
+// main-2026-11-01 snapshot: check-cross.py on armv7em fails -no-allocations with
+// UInt64(value), 2026-11-28].
 // These concrete word initializers lower directly to zero-extension. Int inputs
 // are nonnegative, checked sizes/positions; UInt still checks that precondition.
 // Despite the initializer name, none of these source widths loses bits in UInt64.

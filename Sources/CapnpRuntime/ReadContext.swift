@@ -71,6 +71,8 @@ struct ReadContext: ~Escapable, ~Sendable {
             return id == baseID ? Segment(start: 0, words: frame.byteCount / 8) : nil
         }
         guard id < frame.segmentCount else { return nil }
+        // Frame.parse checked the whole table sums to under `Int.max / 8` bytes, so these
+        // 32-bit sizes convert and multiply without trapping on a 32-bit `Int`.
         var start = frame.headerBytes
         for i in 0..<Int(id) {
             start += Int(bytes.load(fromByteOffset: 4 + i * 4, as: UInt32.self, .littleEndian)) * 8
