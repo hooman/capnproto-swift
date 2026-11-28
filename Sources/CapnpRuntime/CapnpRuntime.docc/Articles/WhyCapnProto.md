@@ -66,14 +66,12 @@ an afterthought:
   compiler — not a runtime assertion — refuses to let a decoded view outlive the buffer it
   borrows from. Swift's newest ownership features exist for exactly this shape of problem.
 
-The trade this library makes for all of that: **v1 is readers only.** There is no
-builder for writing messages yet (designed for v2, not implemented) and no RPC layer (out
-of scope). If your
-embedded device only needs to *read* Cap'n Proto messages — telemetry frames, sensor
-config, firmware manifests, IPC payloads — that trade is likely invisible to you already.
-If you need to *construct* messages on the same constrained device, that's not this
-library yet; see the [roadmap](https://github.com/hooman/capnproto-swift) for where that
-work stands.
+The trade this library makes for all of that is scope. It reads and builds messages, with no
+RPC layer (out of scope) and no multi-segment output: a builder writes one segment of up to
+4 GiB, which covers telemetry frames, sensor config, firmware manifests and IPC payloads
+with room to spare. Builders keep the same promises as readers: no allocation, no traps,
+and storage you own (<doc:BuildingMessages>). The
+[package README](https://github.com/hooman/capnproto-swift#readme) lists what remains.
 
 ## Where this leaves the server-side case
 
