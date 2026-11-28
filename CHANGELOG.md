@@ -18,8 +18,10 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   `StructBuilder.initStruct(at:dataWords:pointerCount:)` return exclusive views, and
   `setData(_:at:default:)`, `data(at:default:)` and `clearPointer(at:)` write and read
   fields. Errors are sticky (`BuildError`) and never trap; `requiredByteCount` is the exact
-  size to retry with after `.outOfSpace`. `framedBytes` opens directly in `Arena`. A
-  message uses at most 4 GiB of storage, so every pointer offset fits its field.
+  size to retry with after `.outOfSpace`. A message that no storage could hold (over
+  4 GiB, or about 256 MiB on 32-bit) is `.messageTooLarge` instead. `framedBytes` opens
+  directly in `Arena`. A message uses at most 4 GiB of storage, so every pointer offset
+  fits its field.
 - `capnpc-swift` generates a builder beside each struct's reader (`ExampleBuilder` beside
   `ExampleReader`) for scalars, enums, nested structs, groups and unions:
   `message.initRoot(ExampleBuilder.self)`, then `setFoo(_:)`, `foo()`, `initFoo()` and
@@ -42,6 +44,16 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   of the test suite byte-equivalently.
 - `CapnpPrimitive` gains `storeMasked(_:into:atBitOffset:default:)`. The protocol stays
   closed to outside conformances.
+
+### Fixed
+
+- `TextReader`'s borrowing iterator no longer traps when asked for the rest of the text:
+  `nextSpan(maxCount: .max)` returns the remaining bytes, then an empty span, as `Span`'s
+  own iterator does. It used to overflow on the second call, on every platform.
+- On 32-bit targets, `Packed.unpackedFrameByteCount` rejects a frame whose segment table is
+  longer than `Int.max / 8` bytes, as `Arena(framedBytes:)` does, instead of overflowing
+  while it walks the table. Only reachable with `segmentLimit` raised far above its default
+  of 512.
 
 ## [0.3.0] - 2026-11-26
 

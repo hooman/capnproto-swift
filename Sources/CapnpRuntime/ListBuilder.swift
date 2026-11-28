@@ -10,7 +10,8 @@
 let maxListCount = (1 << 29) - 1
 
 /// The wire shape of a list: its element size, and the struct sizes of an inline-composite
-/// element. Only `CapnpRuntime` creates shapes.
+/// element. Only `CapnpRuntime` creates shapes, but a conformance can return any of them, so
+/// each typed builder checks the shape it is given (`ListBuilder.checked(_:)`).
 public struct ListShape {
     let elementSize: ElementSize
     let dataWords: Int
@@ -20,6 +21,12 @@ public struct ListShape {
         self.elementSize = elementSize
         self.dataWords = dataWords
         self.pointerCount = pointerCount
+    }
+
+    /// Internal, rather than a public `Equatable` conformance, which would be new API.
+    func matches(_ other: ListShape) -> Bool {
+        elementSize == other.elementSize && dataWords == other.dataWords
+            && pointerCount == other.pointerCount
     }
 }
 
@@ -97,6 +104,17 @@ public struct ListBuilder: ~Copyable, ~Escapable, ~Sendable {
     mutating func slot(_ index: Int) -> Int {
         check(index) ? layout.start + index * 8 : -1
     }
+
+    /// This list, if it has `shape`. Otherwise `.invalidLayout`, and a list with no storage:
+    /// a hand-written `CapnpListBuilder` can declare one shape and wrap the list in the
+    /// typed builder of another, whose accessors would then index past the list's storage.
+    @_lifetime(copy self)
+    consuming func checked(_ shape: ListShape) -> ListBuilder {
+        guard !layout.shape.matches(shape) else { return self }
+        state.value.fail(.invalidLayout)
+        return ListBuilder(
+            segment: segment, state: state, layout: .phantom(shape, depth: layout.depth))
+    }
 }
 
 // MARK: - Typed list builders
@@ -108,7 +126,7 @@ public struct PrimitiveListBuilder<Element: CapnpPrimitive>: ~Copyable, ~Escapab
     var list: ListBuilder
     public static var _capnpListShape: ListShape { ListShape(Element.listElementSize) }
     @_lifetime(copy list)
-    public init(_ list: consuming ListBuilder) { self.list = list }
+    public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
     public var count: Int { list.count }
     public func element(at index: Int) -> Element { list.primitive(at: index) }
@@ -124,7 +142,7 @@ public struct EnumListBuilder<Element: CapnpEnum>: ~Copyable, ~Escapable, ~Senda
     var list: ListBuilder
     public static var _capnpListShape: ListShape { ListShape(.twoBytes) }
     @_lifetime(copy list)
-    public init(_ list: consuming ListBuilder) { self.list = list }
+    public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
     public var count: Int { list.count }
     /// The element, or nil for an ordinal unknown to this schema version.
@@ -141,7 +159,7 @@ public struct VoidListBuilder: ~Copyable, ~Escapable, ~Sendable, CapnpListBuilde
     var list: ListBuilder
     public static var _capnpListShape: ListShape { ListShape(.void) }
     @_lifetime(copy list)
-    public init(_ list: consuming ListBuilder) { self.list = list }
+    public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
     public var count: Int { list.count }
 }
@@ -151,7 +169,7 @@ public struct TextListBuilder: ~Copyable, ~Escapable, ~Sendable, CapnpListBuilde
     var list: ListBuilder
     public static var _capnpListShape: ListShape { ListShape(.pointer) }
     @_lifetime(copy list)
-    public init(_ list: consuming ListBuilder) { self.list = list }
+    public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
     public var count: Int { list.count }
     /// Copy `text` and its NUL terminator into the message as element `index`.
@@ -168,7 +186,7 @@ public struct DataListBuilder: ~Copyable, ~Escapable, ~Sendable, CapnpListBuilde
     var list: ListBuilder
     public static var _capnpListShape: ListShape { ListShape(.pointer) }
     @_lifetime(copy list)
-    public init(_ list: consuming ListBuilder) { self.list = list }
+    public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
     public var count: Int { list.count }
     /// Copy `bytes` into the message as element `index`.
@@ -191,7 +209,7 @@ public struct StructListBuilder<Element: CapnpStructBuilder & ~Copyable & ~Escap
             pointerCount: Element._capnpPointerCount)
     }
     @_lifetime(copy list)
-    public init(_ list: consuming ListBuilder) { self.list = list }
+    public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
     public var count: Int { list.count }
 
@@ -219,7 +237,7 @@ public struct ListListBuilder<Inner: CapnpListBuilder & ~Copyable & ~Escapable>:
     var list: ListBuilder
     public static var _capnpListShape: ListShape { ListShape(.pointer) }
     @_lifetime(copy list)
-    public init(_ list: consuming ListBuilder) { self.list = list }
+    public init(_ list: consuming ListBuilder) { self.list = list.checked(Self._capnpListShape) }
 
     public var count: Int { list.count }
 
@@ -288,12 +306,13 @@ extension StructBuilder {
 // MARK: - Wire writing
 
 extension BuildState {
-    /// Count and reserve `words` words; a byte size that overflows `Int` is out of space.
+    /// Count and reserve `words` words; a byte size that overflows `Int` is too large for
+    /// any storage.
     mutating func allocate(words: Int) -> Int? {
         let (bytes, overflow) = words.multipliedReportingOverflow(by: 8)
         guard !overflow else {
             required = Int.max
-            fail(.outOfSpace)
+            failTooLarge()
             return nil
         }
         return allocate(bytes: bytes)
@@ -394,6 +413,12 @@ extension Builder {
         _ bytes: Span<UInt8>, nul: Bool, in span: inout MutableRawSpan, state: inout BuildState,
         slot: Int, depth: Int
     ) {
+        // Check before adding the NUL: on a 32-bit target a text of Int.max bytes would
+        // overflow `count + 1`.
+        guard bytes.count <= maxListCount - (nul ? 1 : 0) else {
+            state.fail(.listTooLong)
+            return
+        }
         let list = linkList(
             in: &span, state: &state, slot: slot, shape: ListShape(.byte),
             count: bytes.count + (nul ? 1 : 0), depth: depth)

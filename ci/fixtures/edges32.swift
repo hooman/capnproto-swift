@@ -276,5 +276,27 @@ func verify32BitPacked() -> Int {
     precondition(crossing?.consumed == 7 && crossing?.written == 32, "segment-crossing run")
     precondition(storage[2] == 0 && storage[3] == 0 && storage[4] == 0xA5A5)
 
-    return 5
+    // 6. PR #24, R1, written before the fix. With segmentLimit raised to UInt32.max a frame
+    // may declare 2^32 - 1 segments: a 2^31-word table. The size query must reject it, not
+    // overflow a 32-bit Int counting table words: 2 MiB of zero runs expand to the 2^28 words
+    // that pass Int.max bytes. Full Swift only: the input needs a heap array, larger than the
+    // Embedded fixtures' fixed buffers.
+    #if !hasFeature(Embedded)
+        do {
+            let pairs = (1 << 20) + 16
+            var table = [UInt8](repeating: 0xFF, count: 5 + 2 * pairs)
+            table[0] = 0x0F  // four literal bytes follow: count - 1 = 0xFFFFFFFE
+            table[1] = 0xFE
+            var i = 5
+            while i < table.count {
+                table[i] = 0x00  // tag 0x00, then run 0xFF: 256 zero table words
+                i += 2
+            }
+            let size = Packed.unpackedFrameByteCount(table.span.bytes, options: unlimited)
+            precondition(size == nil, "a 2^31-word table must be rejected without overflow")
+        }
+        return 6
+    #else
+        return 5
+    #endif
 }

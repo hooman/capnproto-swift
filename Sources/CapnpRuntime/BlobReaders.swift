@@ -95,8 +95,9 @@ public struct TextReader: ~Escapable, ~Sendable, Iterable, CapnpListElement {
         @_lifetime(&self)
         @_lifetime(self: copy self)
         public mutating func nextSpan(maxCount: Int) -> Span<UInt8> {
-            let limit = max(0, maxCount)
-            let end = min(span.count, position + limit)
+            // Clamp to what is left before adding, so `maxCount: .max` ("the rest") cannot
+            // overflow `position + maxCount`.
+            let end = position + min(max(0, maxCount), span.count - position)
             let chunk = span.extracting(position..<end)
             position = end
             return chunk

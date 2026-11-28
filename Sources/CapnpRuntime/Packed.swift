@@ -55,7 +55,9 @@ public enum Packed {
         // Word 0 holds the segment count minus one and segment 0's size.
         guard let first = words.next(packed) else { return nil }
         let count = widen(UInt32(truncatingIfNeeded: first._lowWord)) + 1
-        guard count <= widen(options.segmentLimit) else { return nil }
+        // As in Frame.parse: a table this long cannot fit in `Int` bytes, and rejecting it
+        // here keeps `written` from overflowing a 32-bit `Int` while the size query walks it.
+        guard count <= widen(options.segmentLimit), count <= widen(Int.max / 8) else { return nil }
         guard store(first, into: &output, at: &written, writing: writing) else { return nil }
         var bodyWords = widen(UInt32(truncatingIfNeeded: (first &>> 32)._lowWord))
 

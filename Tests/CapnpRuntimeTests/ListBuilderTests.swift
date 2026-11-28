@@ -245,10 +245,11 @@ struct ListBuilderTests {
             _ = root.initList(StructListBuilder<NodeBuilder>.self, at: 0, count: 1 << 28)
         }
         #expect(large.error == .outOfSpace)
+        // (2^29 - 1) eight-byte elements need more than the 4 GiB a builder can use (#24, F4).
         let huge = build { root in
             _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 0, count: (1 << 29) - 1)
         }
-        #expect(huge.error == .outOfSpace)
+        #expect(huge.error == .messageTooLarge)
         let negative = build { root in
             _ = root.initList(PrimitiveListBuilder<UInt8>.self, at: 0, count: -1)
         }
@@ -502,5 +503,85 @@ extension ListBuilderTests {
         let retry = build(capacity: short.required, nodes)
         #expect(retry.error == .none)
         #expect(retry.framed.count == 64)
+    }
+}
+
+// Answer key for #24, F4 (clean-room review), written before the fix: a build that needs more
+// than the most storage a builder can use (4 GiB on 64-bit) is .messageTooLarge, and that
+// replaces an earlier .outOfSpace, since no retry can succeed. A build under the cap stays
+// .outOfSpace, with requiredByteCount the exact size to retry with.
+@Suite("Message too large")
+struct MessageTooLargeTests {
+    @Test func overTheCapReplacesOutOfSpace() {
+        var buffer = [UInt8](repeating: 0, count: 48)
+        var error = BuildError.none
+        var required = 0
+        do {
+            var span = buffer.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 0, pointerCount: 2)
+                // Out of space first: 38 bytes of text do not fit in what is left of 48.
+                root.setText("this text does not fit in what is left".utf8Span, at: 0)
+                _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 1, count: (1 << 29) - 1)
+            }
+            error = message.error
+            required = message.requiredByteCount
+        }
+        #expect(error == .messageTooLarge)
+        #expect(required > 1 << 32)
+    }
+
+    @Test func underTheCapStaysOutOfSpace() {
+        var buffer = [UInt8](repeating: 0, count: 48)
+        var error = BuildError.none
+        do {
+            var span = buffer.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 0, pointerCount: 1)
+                _ = root.initList(PrimitiveListBuilder<UInt64>.self, at: 0, count: 1000)
+            }
+            error = message.error
+        }
+        #expect(error == .outOfSpace)
+    }
+}
+
+// Answer key for #24, F2 (clean-room review), written before the fix. CapnpListBuilder is
+// public, so a hand-written conformance can declare one list shape and wrap the list in a
+// typed builder of another. Each typed builder must check the shape it is given: on a
+// mismatch it records .invalidLayout and writes nothing, as linkList already does for a
+// hand-written CapnpStructBuilder's sizes.
+private struct MismatchedList: ~Copyable, ~Escapable, CapnpListBuilder {
+    // A List(Void) shape, so no element storage is allocated...
+    static var _capnpListShape: ListShape { VoidListBuilder._capnpListShape }
+    // ...but written through eight-byte elements.
+    var inner: PrimitiveListBuilder<UInt64>
+    @_lifetime(copy list)
+    init(_ list: consuming ListBuilder) { inner = PrimitiveListBuilder(list) }
+}
+
+@Suite("Mismatched list shape")
+struct MismatchedListTests {
+    @Test func typedBuilderRefusesAnotherShape() {
+        var buffer = [UInt8](repeating: 0xAA, count: 64)
+        var error = BuildError.none
+        var framed = 0
+        do {
+            var span = buffer.mutableSpan
+            var message = MessageBuilder(storage: span.mutableBytes)
+            do {
+                var root = message.initRoot(dataWords: 0, pointerCount: 1)
+                var list = root.initList(MismatchedList.self, at: 0, count: 4)
+                for i in 0..<4 { list.inner.setElement(0x1111_2222_3333_4444, at: i) }
+            }
+            error = message.error
+            framed = message.framedBytes.byteCount
+        }
+        #expect(error == .invalidLayout)
+        #expect(framed == 0)
+        // Nothing past the 24 bytes of header, root pointer and list pointer was written.
+        #expect(buffer[24..<64].allSatisfy { $0 == 0xAA })
     }
 }

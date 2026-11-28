@@ -16,7 +16,8 @@
 /// The first failure while building a message.
 public enum BuildError: UInt8 {
     case none
-    /// The storage is too small. `MessageBuilder.requiredByteCount` gives the size needed.
+    /// The storage is too small. `MessageBuilder.requiredByteCount` gives the size to retry
+    /// with. A build that no storage can hold reports ``messageTooLarge`` instead.
     case outOfSpace
     /// A list, text or data has more than 2^29 - 1 elements, or an inline-composite list more
     /// than 2^29 - 1 words: the wire format's limits.
@@ -27,6 +28,12 @@ public enum BuildError: UInt8 {
     /// A field offset or pointer index outside the struct, or a size outside 0...65535.
     /// Generated code never does this.
     case invalidLayout
+    /// The message needs more storage than any builder can use, so no retry can succeed:
+    /// 4 GiB on a 64-bit target and 268,435,448 bytes (256 MiB less 8) on a 32-bit one
+    /// (`builderCapacity`). It replaces an earlier ``outOfSpace``.
+    /// ``MessageBuilder/requiredByteCount`` still counts the bytes needed, saturating at
+    /// `Int.max`.
+    case messageTooLarge
 }
 
 /// Deepest struct a builder creates; matches `ReaderOptions.defaultNestingLimit`.
@@ -52,8 +59,18 @@ struct BuildState: ~Copyable {
     var required: Int
     var error: BuildError
 
+    /// The most storage any builder can use at this `Int` width: 4 GiB, or 268,435,448
+    /// bytes on 32-bit. Computed, so no global needs lazy initialization.
+    static var maxCapacity: Int { builderCapacity(byteCount: .max) }
+
     mutating func fail(_ failure: BuildError) {
         if error == .none { error = failure }
+    }
+
+    /// No storage can hold the build. This replaces `.outOfSpace`, whose remedy (retry with
+    /// `requiredByteCount`) cannot work; any other first error stays first.
+    mutating func failTooLarge() {
+        if error == .none || error == .outOfSpace { error = .messageTooLarge }
     }
 
     /// Count `bytes`, and reserve them unless a failure already happened or they don't
@@ -61,6 +78,10 @@ struct BuildState: ~Copyable {
     mutating func allocate(bytes: Int) -> Int? {
         let (sum, overflow) = required.addingReportingOverflow(bytes)
         required = overflow ? Int.max : sum
+        guard required <= Self.maxCapacity else {
+            failTooLarge()
+            return nil
+        }
         guard error == .none else { return nil }
         guard bytes <= capacity - used else {
             fail(.outOfSpace)
@@ -93,15 +114,16 @@ struct StructLayout {
 /// Open it over writable storage, initialize the root, set fields, then check ``error``
 /// before using ``framedBytes``. Storage need not be aligned or zeroed. If it is too small,
 /// ``error`` is ``BuildError/outOfSpace`` and ``requiredByteCount`` is the exact size to retry
-/// with, provided the same build steps run again.
+/// with, provided the same build steps run again. If no storage could hold the message, error
+/// is ``BuildError/messageTooLarge`` and a retry cannot succeed.
 public struct MessageBuilder: ~Copyable, ~Escapable, ~Sendable {
     var storage: MutableRawSpan
     var state: BuildState
 
     /// Start an empty message in `storage`. It writes only the frame header and a null
     /// root (16 bytes); the rest of `storage` is zeroed as it is allocated. At most 4 GiB
-    /// of `storage` is used: one segment of 2^29 - 1 words, the most a near pointer can
-    /// span.
+    /// of `storage` is used, one segment of 2^29 - 1 words (the most a near pointer can
+    /// span), or 268,435,448 bytes on a 32-bit target, where bit offsets must fit an `Int`.
     @_lifetime(copy storage)
     public init(storage: consuming MutableRawSpan) {
         let capacity = builderCapacity(byteCount: storage.byteCount)
@@ -123,7 +145,9 @@ public struct MessageBuilder: ~Copyable, ~Escapable, ~Sendable {
     public var error: BuildError { state.error }
 
     /// Bytes the framed message needs: equal to ``framedBytes``' count after a successful
-    /// build, and the exact size to retry with after ``BuildError/outOfSpace``.
+    /// build, and the exact size to retry with after ``BuildError/outOfSpace``. After
+    /// ``BuildError/messageTooLarge`` it is more than any storage a builder can use, or
+    /// `Int.max` if the count overflowed.
     public var requiredByteCount: Int { state.required }
 
     /// The framed message (header and segment), or empty if building failed.
