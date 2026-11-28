@@ -1,0 +1,7 @@
+CONFIG_IDF_TARGET="esp32c6"
+# The 32-bit suites peak near 12 KiB of stack under QEMU, mostly the driver's 8 KiB
+# packed-output buffer.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
+# Halt on a panic instead of rebooting, so the negative control's trap is the last output.
+CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT=y
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
