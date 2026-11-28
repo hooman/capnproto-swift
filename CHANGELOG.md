@@ -18,8 +18,10 @@ Releases are cut by the `release` workflow, which requires an entry here headed
   `StructBuilder.initStruct(at:dataWords:pointerCount:)` return exclusive views, and
   `setData(_:at:default:)`, `data(at:default:)` and `clearPointer(at:)` write and read
   fields. Errors are sticky (`BuildError`) and never trap; `requiredByteCount` is the exact
-  size to retry with after `.outOfSpace`. `framedBytes` opens directly in `Arena`. A
-  message uses at most 4 GiB of storage, so every pointer offset fits its field.
+  size to retry with after `.outOfSpace`. A message that no storage could hold (over
+  4 GiB, or about 256 MiB on 32-bit) is `.messageTooLarge` instead. `framedBytes` opens
+  directly in `Arena`. A message uses at most 4 GiB of storage, so every pointer offset
+  fits its field.
 - `capnpc-swift` generates a builder beside each struct's reader (`ExampleBuilder` beside
   `ExampleReader`) for scalars, enums, nested structs, groups and unions:
   `message.initRoot(ExampleBuilder.self)`, then `setFoo(_:)`, `foo()`, `initFoo()` and
