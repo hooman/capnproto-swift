@@ -193,16 +193,18 @@ func verify32BitEdges() -> Int {
     // 32-bit Int. The lookup of segment 1 must fail soft, not trap converting or summing it.
     do {
         var frame = InlineArray<5, UInt64>(repeating: 0)
-        frame[0] = 1 | 1 << 32  // two segments; segment 0 is 1 word
+        // Hex words, not `1 << 32`: the generic shift allocates on 32-bit Embedded.
+        frame[0] = 0x1_0000_0001  // two segments; segment 0 is 1 word
         frame[1] = 2  // segment 1 is 2 words
-        frame[2] = 2 | 1 << 32  // a far pointer to segment 1, word 0
-        frame[3] = 1 << 32  // landing pad: a struct of 1 data word, right after it
+        frame[2] = 0x1_0000_0002  // a far pointer to segment 1, word 0
+        frame[3] = 0x1_0000_0000  // landing pad: a struct of 1 data word, right after it
         frame[4] = 0x1234
         unsafe withUnsafeMutableBytes(of: &frame) { raw in
             let arena = unsafe Arena(
                 framedBytes: RawSpan(_unsafeBytes: UnsafeRawBufferPointer(raw)))
             precondition(arena.error == .none)
-            unsafe raw.storeBytes(of: UInt32.max, toByteOffset: 4, as: UInt32.self)
+            // Byte stores: storeBytes(of: UInt32) on a raw buffer allocates on 32-bit Embedded.
+            for i in 4..<8 { unsafe raw[i] = 0xFF }  // segment 0's size: 0xFFFFFFFF words
             let value = arena.withRoot { $0.data(at: 0, default: UInt64(7)) }
             let error = arena.error  // read first: precondition's autoclosure cannot capture it
             precondition(value == 7 && error == .invalidPointer, "rewritten table must fail soft")
