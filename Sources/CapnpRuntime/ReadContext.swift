@@ -71,14 +71,25 @@ struct ReadContext: ~Escapable, ~Sendable {
             return id == baseID ? Segment(start: 0, words: frame.byteCount / 8) : nil
         }
         guard id < frame.segmentCount else { return nil }
-        // Frame.parse checked the whole table sums to under `Int.max / 8` bytes, so these
-        // 32-bit sizes convert and multiply without trapping on a 32-bit `Int`.
-        var start = frame.headerBytes
+        // The table is read live, and Frame.parse checked it only once. In memory that another
+        // process can write, it may have changed since, so the sum is taken in UInt64 (a live
+        // size need not fit a 32-bit `Int`) and the segment checked again against the buffer;
+        // otherwise a lookup could trap, or send a load past the buffer.
+        var start = widen(frame.headerBytes)
+        let end = widen(bytes.byteCount)
         for i in 0..<Int(id) {
-            start += Int(bytes.load(fromByteOffset: 4 + i * 4, as: UInt32.self, .littleEndian)) * 8
+            start +=
+                widen(bytes.load(fromByteOffset: 4 + i * 4, as: UInt32.self, .littleEndian)) * 8
+            // Stop once the sum passes the buffer, so it stays under byteCount + 2^35 and can
+            // never overflow, however long the table.
+            guard start <= end else { return nil }
         }
-        let words = bytes.load(fromByteOffset: 4 + Int(id) * 4, as: UInt32.self, .littleEndian)
-        return Segment(start: start, words: Int(words))
+        let words = widen(
+            bytes.load(fromByteOffset: 4 + Int(id) * 4, as: UInt32.self, .littleEndian))
+        guard start + words * 8 <= end else { return nil }
+        // Both now fit an `Int`: the buffer is under `Int.max / 8` bytes (Frame.parse).
+        return Segment(
+            start: Int(bitPattern: start._lowWord), words: Int(bitPattern: words._lowWord))
     }
 
     // Caller must have validated a complete word at this absolute byte offset.
